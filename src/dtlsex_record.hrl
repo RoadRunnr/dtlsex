@@ -85,7 +85,7 @@
 -define(CLIENT, 1).
 
 %% BulkCipherAlgorithm
-%-define(NULL, 0). %% Already defined by ssl_internal.hrl
+%-define(NULL, 0). %% Already defined by dtls_internal.hrl
 -define(RC4, 1).
 -define(RC2, 2).
 -define(DES, 3).
@@ -99,11 +99,11 @@
 -define(BLOCK, 1).
 
 %% IsExportable
-%-define(TRUE, 0).  %% Already defined by ssl_internal.hrl
-%-define(FALSE, 1). %% Already defined by ssl_internal.hrl
+%-define(TRUE, 0).  %% Already defined by dtls_internal.hrl
+%-define(FALSE, 1). %% Already defined by dtls_internal.hrl
 
 %% MAC and PRF Algorithms
-%-define(NULL, 0). %% Already defined by ssl_internal.hrl
+%-define(NULL, 0). %% Already defined by dtls_internal.hrl
 -define(MD5, 1).
 -define(SHA, 2).
 -define(MD5SHA, 4711). %% Not defined in protocol used to represent old prf
@@ -113,7 +113,7 @@
 -define(SHA512, 6).
 
 %% CompressionMethod
-% -define(NULL, 0). %% Already defined by ssl_internal.hrl
+% -define(NULL, 0). %% Already defined by dtls_internal.hrl
 
 
 -record(compression_state, {

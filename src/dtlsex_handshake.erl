@@ -21,14 +21,14 @@
 %% Purpose: Help funtions for handling the SSL-handshake protocol
 %%----------------------------------------------------------------------
 
--module(ssl_handshake).
+-module(dtlsex_handshake).
 
--include("ssl_handshake.hrl").
--include("ssl_record.hrl").
--include("ssl_cipher.hrl").
--include("ssl_alert.hrl").
--include("ssl_internal.hrl").
--include("ssl_srp.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_cipher.hrl").
+-include("dtlsex_alert.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_srp.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -export([master_secret/4, client_hello/9, server_hello/7, hello/4,
@@ -67,20 +67,20 @@ client_hello(Host, Port, Cookie, ConnectionStates,
 			  ciphers = UserSuites
 			 } = SslOpts,
 	     Cache, CacheCb, Renegotiation, OwnCert) ->
-    Version = ssl_record:highest_protocol_version(Versions),
-    Pending = ssl_record:pending_connection_state(ConnectionStates, read),
+    Version = dtlsex_record:highest_protocol_version(Versions),
+    Pending = dtlsex_record:pending_connection_state(ConnectionStates, read),
     SecParams = Pending#connection_state.security_parameters,
     Ciphers = available_suites(UserSuites, Version),
     SRP = srp_user(SslOpts),
     {EcPointFormats, EllipticCurves} = default_ecc_extensions(Version),
 
-    Id = ssl_session:client_id({Host, Port, SslOpts}, Cache, CacheCb, OwnCert),
+    Id = dtlsex_session:client_id({Host, Port, SslOpts}, Cache, CacheCb, OwnCert),
 
     #client_hello{session_id = Id,
 		  client_version = Version,
 		  cipher_suites = cipher_suites(Ciphers, Renegotiation),
 		  cookie = Cookie,
-		  compression_methods = ssl_record:compressions(),
+		  compression_methods = dtlsex_record:compressions(),
 		  random = SecParams#security_parameters.client_random,
 
 		  renegotiation_info =
@@ -113,7 +113,7 @@ encode_protocols_advertised_on_server(Protocols) ->
 %%--------------------------------------------------------------------
 server_hello(SessionId, Version, ConnectionStates, Renegotiation,
 	     ProtocolsAdvertisedOnServer, EcPointFormats, EllipticCurves) ->
-    Pending = ssl_record:pending_connection_state(ConnectionStates, read),
+    Pending = dtlsex_record:pending_connection_state(ConnectionStates, read),
     SecParams = Pending#connection_state.security_parameters,
     #server_hello{server_version = Version,
 		  cipher_suite = SecParams#security_parameters.cipher_suite,
@@ -166,7 +166,7 @@ hello(#server_hello{cipher_suite = CipherSuite, server_version = Version,
 		   versions = SupportedVersions},
       ConnectionStates0, Renegotiation) ->
     %%TODO: select hash and signature algorigthm
-    case ssl_record:is_acceptable_version(Version, SupportedVersions) of
+    case dtlsex_record:is_acceptable_version(Version, SupportedVersions) of
 	true ->
 	    case handle_renegotiation_info(client, Info, ConnectionStates0, 
 					   Renegotiation, SecureRenegotation, []) of
@@ -191,9 +191,9 @@ hello(#client_hello{client_version = ClientVersion} = Hello,
       #ssl_options{versions = Versions} = SslOpts,
       {Port, Session0, Cache, CacheCb, ConnectionStates0, Cert}, Renegotiation) ->
     %% TODO: select hash and signature algorithm
-    ConnectionStates1 = ssl_record:init_connection_state_seq(ClientVersion, ConnectionStates0),
+    ConnectionStates1 = dtlsex_record:init_connection_state_seq(ClientVersion, ConnectionStates0),
     Version = select_version(ClientVersion, Versions),
-    case ssl_record:is_acceptable_version(Version, Versions) of
+    case dtlsex_record:is_acceptable_version(Version, Versions) of
 	true ->
 	    %% TODO: need to take supported Curves into Account when selecting the CipherSuite....
 	    %%       if whe have an ECDSA cert with an unsupported curve, we need to drop ECDSA ciphers
@@ -231,12 +231,12 @@ certify(#certificate{asn1_certificates = ASN1Certs}, CertDbHandle, CertDbRef,
 	case VerifyFunAndState of
 	    undefined ->
 		{fun(OtpCert, ExtensionOrVerifyResult, SslState) ->
-			 ssl_certificate:validate_extension(OtpCert,
+			 dtlsex_certificate:validate_extension(OtpCert,
 							    ExtensionOrVerifyResult, SslState)
 		 end, Role};
 	    {Fun, UserState0} ->
 		{fun(OtpCert, {extension, _} = Extension, {SslState, UserState}) ->
-			 case ssl_certificate:validate_extension(OtpCert,
+			 case dtlsex_certificate:validate_extension(OtpCert,
 								 Extension,
 								 SslState) of
 			     {valid, NewSslState} ->
@@ -256,7 +256,7 @@ certify(#certificate{asn1_certificates = ASN1Certs}, CertDbHandle, CertDbRef,
 
     try
 	{TrustedErlCert, CertPath}  =
-	    ssl_certificate:trusted_cert_and_path(ASN1Certs, CertDbHandle, CertDbRef),
+	    dtlsex_certificate:trusted_cert_and_path(ASN1Certs, CertDbHandle, CertDbRef),
 	case public_key:pkix_path_validation(TrustedErlCert,
 					      CertPath,
 					     [{max_path_length,
@@ -280,7 +280,7 @@ certify(#certificate{asn1_certificates = ASN1Certs}, CertDbHandle, CertDbRef,
 %%--------------------------------------------------------------------
 certificate(OwnCert, CertDbHandle, CertDbRef, client) ->
     Chain =
-	case ssl_certificate:certificate_chain(OwnCert, CertDbHandle, CertDbRef) of
+	case dtlsex_certificate:certificate_chain(OwnCert, CertDbHandle, CertDbRef) of
 	    {ok, CertChain} ->
 		CertChain;
 	    {error, _} -> 
@@ -292,7 +292,7 @@ certificate(OwnCert, CertDbHandle, CertDbRef, client) ->
     #certificate{asn1_certificates = Chain};
 
 certificate(OwnCert, CertDbHandle, CertDbRef, server) ->
-    case ssl_certificate:certificate_chain(OwnCert, CertDbHandle, CertDbRef) of
+    case dtlsex_certificate:certificate_chain(OwnCert, CertDbHandle, CertDbRef) of
 	{ok, Chain} ->
 	    #certificate{asn1_certificates = Chain};
 	{error, _} ->
@@ -371,7 +371,7 @@ verify_signature(_Version, Hash, {HashAlgo, ecdsa}, Signature, {?'id-ecPublicKey
 certificate_request(ConnectionStates, CertDbHandle, CertDbRef) ->
     #connection_state{security_parameters = 
 		      #security_parameters{cipher_suite = CipherSuite}} =
-	ssl_record:pending_connection_state(ConnectionStates, read),
+	dtlsex_record:pending_connection_state(ConnectionStates, read),
     Types = certificate_types(CipherSuite),
     HashSigns = default_hash_signs(),
     Authorities = certificate_authorities(CertDbHandle, CertDbRef),
@@ -531,7 +531,7 @@ enc_server_key_exchange(Version, Params, {HashAlgo, SignAlgo},
 master_secret(Version, #session{master_secret = Mastersecret}, 
 	      ConnectionStates, Role) ->
     ConnectionState = 
-	ssl_record:pending_connection_state(ConnectionStates, read),
+	dtlsex_record:pending_connection_state(ConnectionStates, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     try master_secret(Version, Mastersecret, SecParams, 
 		      ConnectionStates, Role)
@@ -545,7 +545,7 @@ master_secret(Version, #session{master_secret = Mastersecret},
 
 master_secret(Version, PremasterSecret, ConnectionStates, Role) ->
     ConnectionState = 
-	ssl_record:pending_connection_state(ConnectionStates, read),
+	dtlsex_record:pending_connection_state(ConnectionStates, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{prf_algorithm = PrfAlgo,
 			 client_random = ClientRandom,
@@ -770,9 +770,9 @@ server_key_exchange_hash(Hash, Value) ->
 prf({3,0}, _, _, _, _) ->
     {error, undefined};
 prf({3,1}, Secret, Label, Seed, WantedLength) ->
-    {ok, ssl_tls1:prf(?MD5SHA, Secret, Label, Seed, WantedLength)};
+    {ok, dtlsex_tls1:prf(?MD5SHA, Secret, Label, Seed, WantedLength)};
 prf({3,_N}, Secret, Label, Seed, WantedLength) ->
-    {ok, ssl_tls1:prf(?SHA256, Secret, Label, Seed, WantedLength)}.
+    {ok, dtlsex_tls1:prf(?SHA256, Secret, Label, Seed, WantedLength)}.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
@@ -1020,7 +1020,7 @@ path_validation_alert(_) ->
 select_session(Hello, Port, Session, Version,
 	       #ssl_options{ciphers = UserSuites} = SslOpts, Cache, CacheCb, Cert) ->
     SuggestedSessionId = Hello#client_hello.session_id,
-    {SessionId, Resumed} = ssl_session:server_id(Port, SuggestedSessionId,
+    {SessionId, Resumed} = dtlsex_session:server_id(Port, SuggestedSessionId,
 						 SslOpts, Cert,
 						 Cache, CacheCb),
     Suites = available_suites(Cert, UserSuites, Version),
@@ -1039,13 +1039,13 @@ select_session(Hello, Port, Session, Version,
 available_suites(UserSuites, Version) ->
     case UserSuites of
 	[] ->
-	    ssl_cipher:suites(Version);
+	    dtlsex_cipher:suites(Version);
 	_ ->
 	    UserSuites
     end.
 
 available_suites(ServerCert, UserSuites, Version) ->
-    ssl_cipher:filter(ServerCert, available_suites(UserSuites, Version)).
+    dtlsex_cipher:filter(ServerCert, available_suites(UserSuites, Version)).
  
 cipher_suites(Suites, false) ->
     [?TLS_EMPTY_RENEGOTIATION_INFO_SCSV | Suites];
@@ -1060,7 +1060,7 @@ srp_user(_) ->
 renegotiation_info(client, _, false) ->
     #renegotiation_info{renegotiated_connection = undefined};
 renegotiation_info(server, ConnectionStates, false) ->
-    CS  = ssl_record:current_connection_state(ConnectionStates, read),
+    CS  = dtlsex_record:current_connection_state(ConnectionStates, read),
     case CS#connection_state.secure_renegotiation of
 	true ->
 	    #renegotiation_info{renegotiated_connection = ?byte(0)};
@@ -1068,7 +1068,7 @@ renegotiation_info(server, ConnectionStates, false) ->
 	    #renegotiation_info{renegotiated_connection = undefined}
     end;
 renegotiation_info(client, ConnectionStates, true) ->
-    CS = ssl_record:current_connection_state(ConnectionStates, read),
+    CS = dtlsex_record:current_connection_state(ConnectionStates, read),
     case CS#connection_state.secure_renegotiation of
 	true ->
 	    Data = CS#connection_state.client_verify_data,
@@ -1078,7 +1078,7 @@ renegotiation_info(client, ConnectionStates, true) ->
     end;
 
 renegotiation_info(server, ConnectionStates, true) ->
-    CS = ssl_record:current_connection_state(ConnectionStates, read),
+    CS = dtlsex_record:current_connection_state(ConnectionStates, read),
     case CS#connection_state.secure_renegotiation of
 	true ->
 	    CData = CS#connection_state.client_verify_data,
@@ -1143,7 +1143,7 @@ default_ecc_extensions(Version) ->
     case proplists:get_bool(ec, crypto:algorithms()) of
 	true ->
 	    EcPointFormats = #ec_point_formats{ec_point_format_list = [?ECPOINT_UNCOMPRESSED]},
-	    EllipticCurves = #elliptic_curves{elliptic_curve_list = ssl_tls1:ecc_curves(Version)},
+	    EllipticCurves = #elliptic_curves{elliptic_curve_list = dtlsex_tls1:ecc_curves(Version)},
 	    {EcPointFormats, EllipticCurves};
 	_ ->
 	    {undefined, undefined}
@@ -1167,26 +1167,26 @@ handle_ecc_point_fmt_extension(_) ->
 handle_ecc_curves_extension(_Version, undefined) ->
     undefined;
 handle_ecc_curves_extension(Version, _) ->
-    #elliptic_curves{elliptic_curve_list = ssl_tls1:ecc_curves(Version)}.
+    #elliptic_curves{elliptic_curve_list = dtlsex_tls1:ecc_curves(Version)}.
 
 handle_renegotiation_info(_, #renegotiation_info{renegotiated_connection = ?byte(0)}, 
 			  ConnectionStates, false, _, _) ->
-    {ok, ssl_record:set_renegotiation_flag(true, ConnectionStates)};
+    {ok, dtlsex_record:set_renegotiation_flag(true, ConnectionStates)};
 
 handle_renegotiation_info(server, undefined, ConnectionStates, _, _, CipherSuites) -> 
     case is_member(?TLS_EMPTY_RENEGOTIATION_INFO_SCSV, CipherSuites) of
 	true ->
-	    {ok, ssl_record:set_renegotiation_flag(true, ConnectionStates)};
+	    {ok, dtlsex_record:set_renegotiation_flag(true, ConnectionStates)};
 	false ->
-	    {ok, ssl_record:set_renegotiation_flag(false, ConnectionStates)}
+	    {ok, dtlsex_record:set_renegotiation_flag(false, ConnectionStates)}
     end;
 
 handle_renegotiation_info(_, undefined, ConnectionStates, false, _, _) ->
-    {ok, ssl_record:set_renegotiation_flag(false, ConnectionStates)};
+    {ok, dtlsex_record:set_renegotiation_flag(false, ConnectionStates)};
 
 handle_renegotiation_info(client, #renegotiation_info{renegotiated_connection = ClientServerVerify}, 
 			  ConnectionStates, true, _, _) ->
-    CS = ssl_record:current_connection_state(ConnectionStates, read),
+    CS = dtlsex_record:current_connection_state(ConnectionStates, read),
     CData = CS#connection_state.client_verify_data,
     SData = CS#connection_state.server_verify_data,    
     case <<CData/binary, SData/binary>> == ClientServerVerify of
@@ -1202,7 +1202,7 @@ handle_renegotiation_info(server, #renegotiation_info{renegotiated_connection = 
 	  true ->
 	      ?ALERT_REC(?FATAL, ?HANDSHAKE_FAILURE);
 	  false ->	
-	      CS = ssl_record:current_connection_state(ConnectionStates, read),
+	      CS = dtlsex_record:current_connection_state(ConnectionStates, read),
 	      Data = CS#connection_state.client_verify_data,
 	      case Data == ClientVerify of
 		  true ->
@@ -1224,7 +1224,7 @@ handle_renegotiation_info(server, undefined, ConnectionStates, true, SecureReneg
      end.
 
 handle_renegotiation_info(ConnectionStates, SecureRenegotation) ->
-    CS = ssl_record:current_connection_state(ConnectionStates, read),
+    CS = dtlsex_record:current_connection_state(ConnectionStates, read),
     case {SecureRenegotation, CS#connection_state.secure_renegotiation} of
 	{_, true} ->
 	    ?ALERT_REC(?FATAL, ?HANDSHAKE_FAILURE);
@@ -1241,9 +1241,9 @@ handle_renegotiation_info(ConnectionStates, SecureRenegotation) ->
 hello_pending_connection_states(Role, Version, CipherSuite, Random, Compression,
 				 ConnectionStates) ->    
     ReadState =  
-	ssl_record:pending_connection_state(ConnectionStates, read),
+	dtlsex_record:pending_connection_state(ConnectionStates, read),
     WriteState = 
-	ssl_record:pending_connection_state(ConnectionStates, write),
+	dtlsex_record:pending_connection_state(ConnectionStates, write),
     
     NewReadSecParams = 
 	hello_security_parameters(Role, Version, ReadState, CipherSuite,
@@ -1253,14 +1253,14 @@ hello_pending_connection_states(Role, Version, CipherSuite, Random, Compression,
 	hello_security_parameters(Role, Version, WriteState, CipherSuite,
 			    Random, Compression),
  
-    ssl_record:update_security_params(NewReadSecParams,
+    dtlsex_record:update_security_params(NewReadSecParams,
 				    NewWriteSecParams,
 				    ConnectionStates).
 
 hello_security_parameters(client, Version, ConnectionState, CipherSuite, Random,
 			  Compression) ->   
     SecParams = ConnectionState#connection_state.security_parameters,
-    NewSecParams = ssl_cipher:security_parameters(Version, CipherSuite, SecParams),
+    NewSecParams = dtlsex_cipher:security_parameters(Version, CipherSuite, SecParams),
     NewSecParams#security_parameters{
       server_random = Random,
       compression_algorithm = Compression
@@ -1269,15 +1269,15 @@ hello_security_parameters(client, Version, ConnectionState, CipherSuite, Random,
 hello_security_parameters(server, Version, ConnectionState, CipherSuite, Random,
 			  Compression) ->
     SecParams = ConnectionState#connection_state.security_parameters,
-    NewSecParams = ssl_cipher:security_parameters(Version, CipherSuite, SecParams),
+    NewSecParams = dtlsex_cipher:security_parameters(Version, CipherSuite, SecParams),
     NewSecParams#security_parameters{
       client_random = Random,
       compression_algorithm = Compression
      }.
 
 select_version(ClientVersion, Versions) ->   
-    ServerVersion = ssl_record:highest_protocol_version(Versions),
-    ssl_record:lowest_protocol_version(ClientVersion, ServerVersion).
+    ServerVersion = dtlsex_record:highest_protocol_version(Versions),
+    dtlsex_record:lowest_protocol_version(ClientVersion, ServerVersion).
 
 select_cipher_suite([], _) ->
    no_suite;
@@ -1309,15 +1309,15 @@ master_secret(Version, MasterSecret, #security_parameters{
 	setup_keys(Version, PrfAlgo, MasterSecret, ServerRandom,
 		   ClientRandom, HashSize, KML, EKML, IVS),
 
-    ConnStates1 = ssl_record:set_master_secret(MasterSecret, ConnectionStates),
+    ConnStates1 = dtlsex_record:set_master_secret(MasterSecret, ConnectionStates),
     ConnStates2 =
-	ssl_record:set_mac_secret(ClientWriteMacSecret, ServerWriteMacSecret,
+	dtlsex_record:set_mac_secret(ClientWriteMacSecret, ServerWriteMacSecret,
 				  Role, ConnStates1),
 
     ClientCipherState = #cipher_state{iv = ClientIV, key = ClientWriteKey},
     ServerCipherState = #cipher_state{iv = ServerIV, key = ServerWriteKey}, 
     {MasterSecret, 
-     ssl_record:set_pending_cipher_state(ConnStates2, ClientCipherState, 
+     dtlsex_record:set_pending_cipher_state(ConnStates2, ClientCipherState, 
 					 ServerCipherState, Role)}.
 
 
@@ -1337,7 +1337,7 @@ dec_hs(_Version, ?CLIENT_HELLO, <<?BYTE(Major), ?BYTE(Minor),
 				  CipherSuites:CSLength/binary,
 				  ChallengeData:CDLength/binary>>) ->
     #client_hello{client_version = {Major, Minor},
-		  random = ssl_ssl2:client_random(ChallengeData, CDLength),
+		  random = dtlsex_ssl2:client_random(ChallengeData, CDLength),
 		  session_id = 0,
 		  cipher_suites = from_3bytes(CipherSuites),
 		  compression_methods = [?NULL],
@@ -1455,7 +1455,7 @@ dec_hs({Major, Minor}, ?CERTIFICATE_REQUEST,
 	?UINT16(HashSignsLen), HashSigns:HashSignsLen/binary,
 	?UINT16(CertAuthsLen), CertAuths:CertAuthsLen/binary>>)
   when Major == 3, Minor >= 3 ->
-    HashSignAlgos = [{ssl_cipher:hash_algorithm(Hash), ssl_cipher:sign_algorithm(Sign)} ||
+    HashSignAlgos = [{dtlsex_cipher:hash_algorithm(Hash), dtlsex_cipher:sign_algorithm(Sign)} ||
 			<<?BYTE(Hash), ?BYTE(Sign)>> <= HashSigns],
     #certificate_request{certificate_types = CertTypes,
 			 hashsign_algorithms = #hash_sign_algos{hash_sign_algos = HashSignAlgos},
@@ -1521,12 +1521,12 @@ dec_ske_params(Len, Keys, Version) ->
 dec_ske_signature(Params, <<?BYTE(HashAlgo), ?BYTE(SignAlgo),
 			    ?UINT16(0)>>, {Major, Minor})
   when Major == 3, Minor >= 3 ->
-    HashSign = {ssl_cipher:hash_algorithm(HashAlgo), ssl_cipher:sign_algorithm(SignAlgo)},
+    HashSign = {dtlsex_cipher:hash_algorithm(HashAlgo), dtlsex_cipher:sign_algorithm(SignAlgo)},
     {Params, HashSign, <<>>};
 dec_ske_signature(Params, <<?BYTE(HashAlgo), ?BYTE(SignAlgo),
 			    ?UINT16(Len), Signature:Len/binary>>, {Major, Minor})
   when Major == 3, Minor >= 3 ->
-    HashSign = {ssl_cipher:hash_algorithm(HashAlgo), ssl_cipher:sign_algorithm(SignAlgo)},
+    HashSign = {dtlsex_cipher:hash_algorithm(HashAlgo), dtlsex_cipher:sign_algorithm(SignAlgo)},
     {Params, HashSign, Signature};
 dec_ske_signature(Params, <<>>, _) ->
     {Params, {null, anon}, <<>>};
@@ -1553,7 +1553,7 @@ dec_server_key(<<?BYTE(?NAMED_CURVE), ?UINT16(CurveID),
 		 ?BYTE(PointLen), ECPoint:PointLen/binary,
 		 _/binary>> = KeyStruct,
 	       ?KEY_EXCHANGE_EC_DIFFIE_HELLMAN, Version) ->
-    Params = #server_ecdh_params{curve = {namedCurve, ssl_tls1:enum_to_oid(CurveID)},
+    Params = #server_ecdh_params{curve = {namedCurve, dtlsex_tls1:enum_to_oid(CurveID)},
 				 public = ECPoint},
     {BinMsg, HashSign, Signature} = dec_ske_params(PointLen + 4, KeyStruct, Version),
     #server_key_params{params = Params,
@@ -1578,7 +1578,7 @@ dec_server_key(<<?UINT16(Len), IdentityHint:Len/binary,
     Params = #server_ecdhe_psk_params{
       hint = IdentityHint,
       dh_params = #server_ecdh_params{
-	curve = {namedCurve, ssl_tls1:enum_to_oid(CurveID)},
+	curve = {namedCurve, dtlsex_tls1:enum_to_oid(CurveID)},
 	public = ECPoint}},
     {BinMsg, HashSign, Signature} = dec_ske_params(Len + 2 + PointLen + 4, KeyStruct, Version),
     #server_key_params{params = Params,
@@ -1646,7 +1646,7 @@ dec_hello_extensions(<<?UINT16(?SIGNATURE_ALGORITHMS_EXT), ?UINT16(Len),
 		       ExtData:Len/binary, Rest/binary>>, Acc) ->
     SignAlgoListLen = Len - 2,
     <<?UINT16(SignAlgoListLen), SignAlgoList/binary>> = ExtData,
-    HashSignAlgos = [{ssl_cipher:hash_algorithm(Hash), ssl_cipher:sign_algorithm(Sign)} ||
+    HashSignAlgos = [{dtlsex_cipher:hash_algorithm(Hash), dtlsex_cipher:sign_algorithm(Sign)} ||
 			<<?BYTE(Hash), ?BYTE(Sign)>> <= SignAlgoList],
     dec_hello_extensions(Rest, [{hash_signs,
 				 #hash_sign_algos{hash_sign_algos = HashSignAlgos}} | Acc]);
@@ -1655,7 +1655,7 @@ dec_hello_extensions(<<?UINT16(?ELLIPTIC_CURVES_EXT), ?UINT16(Len),
 		       ExtData:Len/binary, Rest/binary>>, Acc) ->
     EllipticCurveListLen = Len - 2,
     <<?UINT16(EllipticCurveListLen), EllipticCurveList/binary>> = ExtData,
-    EllipticCurves = [ssl_tls1:enum_to_oid(X) || <<X:16>> <= EllipticCurveList],
+    EllipticCurves = [dtlsex_tls1:enum_to_oid(X) || <<X:16>> <= EllipticCurveList],
     dec_hello_extensions(Rest, [{elliptic_curves,
 				 #elliptic_curves{elliptic_curve_list = EllipticCurves}} | Acc]);
 
@@ -1734,8 +1734,8 @@ enc_hs(#client_hello{client_version = {Major, Minor},
     BinCipherSuites = list_to_binary(CipherSuites),
     CsLength = byte_size(BinCipherSuites),
     Extensions0 = hello_extensions(RenegotiationInfo, SRP, NextProtocolNegotiation)
-	++ ec_hello_extensions(lists:map(fun ssl_cipher:suite_definition/1, CipherSuites), EcPointFormats)
-	++ ec_hello_extensions(lists:map(fun ssl_cipher:suite_definition/1, CipherSuites), EllipticCurves),
+	++ ec_hello_extensions(lists:map(fun dtlsex_cipher:suite_definition/1, CipherSuites), EcPointFormats)
+	++ ec_hello_extensions(lists:map(fun dtlsex_cipher:suite_definition/1, CipherSuites), EllipticCurves),
     Extensions1 = if
 		      Major == 3, Minor >=3 -> Extensions0 ++ hello_extensions(HashSigns);
 		      true -> Extensions0
@@ -1758,7 +1758,7 @@ enc_hs(#server_hello{server_version = {Major, Minor},
 		     elliptic_curves = EllipticCurves,
 		     next_protocol_negotiation = NextProtocolNegotiation}, _Version) ->
     SID_length = byte_size(Session_ID),
-    CipherSuites = [ssl_cipher:suite_definition(CipherSuite)],
+    CipherSuites = [dtlsex_cipher:suite_definition(CipherSuite)],
     Extensions  = hello_extensions(RenegotiationInfo, NextProtocolNegotiation)
 	++ ec_hello_extensions(CipherSuites, EcPointFormats)
 	++ ec_hello_extensions(CipherSuites, EllipticCurves),
@@ -1781,7 +1781,7 @@ enc_hs(#certificate_request{certificate_types = CertTypes,
 			    certificate_authorities = CertAuths},
        {Major, Minor})
   when Major == 3, Minor >= 3 ->
-    HashSigns= << <<(ssl_cipher:hash_algorithm(Hash)):8, (ssl_cipher:sign_algorithm(Sign)):8>> ||
+    HashSigns= << <<(dtlsex_cipher:hash_algorithm(Hash)):8, (dtlsex_cipher:sign_algorithm(Sign)):8>> ||
 		   {Hash, Sign} <- HashSignAlgos >>,
     CertTypesLen = byte_size(CertTypes),
     HashSignsLen = byte_size(HashSigns),
@@ -1858,7 +1858,7 @@ enc_server_key(#server_dh_params{dh_p = P, dh_g = G, dh_y = Y}) ->
 enc_server_key(#server_ecdh_params{curve = {namedCurve, ECCurve}, public = ECPubKey}) ->
     %%TODO: support arbitrary keys
     KLen = size(ECPubKey),
-    <<?BYTE(?NAMED_CURVE_TYPE), ?UINT16((ssl_tls1:oid_to_enum(ECCurve))),
+    <<?BYTE(?NAMED_CURVE_TYPE), ?UINT16((dtlsex_tls1:oid_to_enum(ECCurve))),
       ?BYTE(KLen), ECPubKey/binary>>;
 enc_server_key(#server_psk_params{hint = PskIdentityHint}) ->
     Len = byte_size(PskIdentityHint),
@@ -1873,7 +1873,7 @@ enc_server_key(#server_ecdhe_psk_params{
     Len = byte_size(PskIdentityHint),
     KLen = size(ECPubKey),
     <<?UINT16(Len), PskIdentityHint/binary,
-      ?BYTE(?NAMED_CURVE_TYPE), ?UINT16((ssl_tls1:oid_to_enum(ECCurve))),
+      ?BYTE(?NAMED_CURVE_TYPE), ?UINT16((dtlsex_tls1:oid_to_enum(ECCurve))),
       ?BYTE(KLen), ECPubKey/binary>>;
 enc_server_key(Params = #server_dhe_psk_params{hint = undefined}) ->
     enc_server_key(Params#server_dhe_psk_params{hint = <<>>});
@@ -1984,7 +1984,7 @@ enc_hello_extensions([#renegotiation_info{renegotiated_connection = Info} | Rest
     Len = InfoLen +1,
     enc_hello_extensions(Rest, <<?UINT16(?RENEGOTIATION_EXT), ?UINT16(Len), ?BYTE(InfoLen), Info/binary, Acc/binary>>);
 enc_hello_extensions([#elliptic_curves{elliptic_curve_list = EllipticCurves} | Rest], Acc) ->
-    EllipticCurveList = << <<(ssl_tls1:oid_to_enum(X)):16>> || X <- EllipticCurves>>,
+    EllipticCurveList = << <<(dtlsex_tls1:oid_to_enum(X)):16>> || X <- EllipticCurves>>,
     ListLen = byte_size(EllipticCurveList),
     Len = ListLen + 2,
     enc_hello_extensions(Rest, <<?UINT16(?ELLIPTIC_CURVES_EXT),
@@ -2000,7 +2000,7 @@ enc_hello_extensions([#srp{username = UserName} | Rest], Acc) ->
     Len = SRPLen + 2,
     enc_hello_extensions(Rest, <<?UINT16(?SRP_EXT), ?UINT16(Len), ?BYTE(SRPLen), UserName/binary, Acc/binary>>);
 enc_hello_extensions([#hash_sign_algos{hash_sign_algos = HashSignAlgos} | Rest], Acc) ->
-    SignAlgoList = << <<(ssl_cipher:hash_algorithm(Hash)):8, (ssl_cipher:sign_algorithm(Sign)):8>> ||
+    SignAlgoList = << <<(dtlsex_cipher:hash_algorithm(Hash)):8, (dtlsex_cipher:sign_algorithm(Sign)):8>> ||
 		       {Hash, Sign} <- HashSignAlgos >>,
     ListLen = byte_size(SignAlgoList),
     Len = ListLen + 2,
@@ -2053,11 +2053,11 @@ certificate_types(_) ->
     <<?BYTE(?RSA_SIGN)>>.
 
 hashsign_dec(<<?BYTE(HashAlgo), ?BYTE(SignAlgo)>>) ->
-    {ssl_cipher:hash_algorithm(HashAlgo), ssl_cipher:sign_algorithm(SignAlgo)}.
+    {dtlsex_cipher:hash_algorithm(HashAlgo), dtlsex_cipher:sign_algorithm(SignAlgo)}.
 
 hashsign_enc(HashAlgo, SignAlgo) ->
-    Hash = ssl_cipher:hash_algorithm(HashAlgo),
-    Sign = ssl_cipher:sign_algorithm(SignAlgo),
+    Hash = dtlsex_cipher:hash_algorithm(HashAlgo),
+    Sign = dtlsex_cipher:sign_algorithm(SignAlgo),
     <<?BYTE(Hash), ?BYTE(Sign)>>.
 
 certificate_authorities(CertDbHandle, CertDbRef) ->
@@ -2076,7 +2076,7 @@ certificate_authorities_from_db(CertDbHandle, CertDbRef) ->
 			 (_, Acc) ->
 			      Acc
 		      end,
-    ssl_certificate_db:foldl(ConnectionCerts, [], CertDbHandle).
+    dtlsex_certificate_db:foldl(ConnectionCerts, [], CertDbHandle).
 
 
 digitally_signed({3, Minor}, Hash, HashAlgo, Key) when Minor >= 3 ->
@@ -2090,50 +2090,50 @@ digitally_signed(_Version, Hash, HashAlgo, Key) ->
     public_key:sign({digest, Hash}, HashAlgo, Key).
 
 calc_master_secret({3,0}, _PrfAlgo, PremasterSecret, ClientRandom, ServerRandom) ->
-    ssl_ssl3:master_secret(PremasterSecret, ClientRandom, ServerRandom);
+    dtlsex_ssl3:master_secret(PremasterSecret, ClientRandom, ServerRandom);
 
 calc_master_secret({3,_}, PrfAlgo, PremasterSecret, ClientRandom, ServerRandom) ->
-    ssl_tls1:master_secret(PrfAlgo, PremasterSecret, ClientRandom, ServerRandom);
+    dtlsex_tls1:master_secret(PrfAlgo, PremasterSecret, ClientRandom, ServerRandom);
 
 calc_master_secret({254,_}, PrfAlgo, PremasterSecret, ClientRandom, ServerRandom) ->
-    ssl_tls1:master_secret(PrfAlgo, PremasterSecret, ClientRandom, ServerRandom).
+    dtlsex_tls1:master_secret(PrfAlgo, PremasterSecret, ClientRandom, ServerRandom).
 
 setup_keys({3,0}, _PrfAlgo, MasterSecret,
 	   ServerRandom, ClientRandom, HashSize, KML, EKML, IVS) ->
-    ssl_ssl3:setup_keys(MasterSecret, ServerRandom,
+    dtlsex_ssl3:setup_keys(MasterSecret, ServerRandom,
 			ClientRandom, HashSize, KML, EKML, IVS);
 
 setup_keys({3,N}, PrfAlgo, MasterSecret,
 	   ServerRandom, ClientRandom, HashSize, KML, _EKML, IVS) ->
-    ssl_tls1:setup_keys(N, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
+    dtlsex_tls1:setup_keys(N, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
 			KML, IVS);
 
 setup_keys({254,255}, PrfAlgo, MasterSecret,
 	   ServerRandom, ClientRandom, HashSize, KML, _EKML, IVS) ->
-    ssl_tls1:setup_keys(2, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
+    dtlsex_tls1:setup_keys(2, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
 			KML, IVS);
 setup_keys({254,N}, PrfAlgo, MasterSecret,
 	   ServerRandom, ClientRandom, HashSize, KML, _EKML, IVS) ->
-    ssl_tls1:setup_keys(256 - N, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
+    dtlsex_tls1:setup_keys(256 - N, PrfAlgo, MasterSecret, ServerRandom, ClientRandom, HashSize,
 			KML, IVS).
 
 calc_finished({3, 0}, Role, _PrfAlgo, MasterSecret, Handshake) ->
-    ssl_ssl3:finished(Role, MasterSecret, lists:reverse(Handshake));
+    dtlsex_ssl3:finished(Role, MasterSecret, lists:reverse(Handshake));
 calc_finished({3, N}, Role, PrfAlgo, MasterSecret, Handshake) ->
-    ssl_tls1:finished(Role, N, PrfAlgo, MasterSecret, lists:reverse(Handshake));
+    dtlsex_tls1:finished(Role, N, PrfAlgo, MasterSecret, lists:reverse(Handshake));
 calc_finished({254, 255}, Role, PrfAlgo, MasterSecret, Handshake) ->
-    ssl_tls1:finished(Role, 2, PrfAlgo, MasterSecret, lists:reverse(Handshake));
+    dtlsex_tls1:finished(Role, 2, PrfAlgo, MasterSecret, lists:reverse(Handshake));
 calc_finished({254, N}, Role, PrfAlgo, MasterSecret, Handshake) ->
-    ssl_tls1:finished(Role, 256 - N, PrfAlgo, MasterSecret, lists:reverse(Handshake)).
+    dtlsex_tls1:finished(Role, 256 - N, PrfAlgo, MasterSecret, lists:reverse(Handshake)).
 
 calc_certificate_verify({3, 0}, HashAlgo, MasterSecret, Handshake) ->
-    ssl_ssl3:certificate_verify(HashAlgo, MasterSecret, lists:reverse(Handshake));
+    dtlsex_ssl3:certificate_verify(HashAlgo, MasterSecret, lists:reverse(Handshake));
 calc_certificate_verify({3, N}, HashAlgo, _MasterSecret, Handshake) ->
-    ssl_tls1:certificate_verify(HashAlgo, N, lists:reverse(Handshake));
+    dtlsex_tls1:certificate_verify(HashAlgo, N, lists:reverse(Handshake));
 calc_certificate_verify({254, 255}, HashAlgo, _MasterSecret, Handshake) ->
-    ssl_tls1:certificate_verify(HashAlgo, 2, lists:reverse(Handshake));
+    dtlsex_tls1:certificate_verify(HashAlgo, 2, lists:reverse(Handshake));
 calc_certificate_verify({254, N}, HashAlgo, _MasterSecret, Handshake) ->
-    ssl_tls1:certificate_verify(HashAlgo, 256 - N, lists:reverse(Handshake)).
+    dtlsex_tls1:certificate_verify(HashAlgo, 256 - N, lists:reverse(Handshake)).
 
 key_exchange_alg(rsa) ->
     ?KEY_EXCHANGE_RSA;

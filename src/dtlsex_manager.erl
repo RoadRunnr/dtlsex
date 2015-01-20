@@ -21,7 +21,7 @@
 %% Purpose: Manages ssl sessions and trusted certifacates
 %%----------------------------------------------------------------------
 
--module(ssl_manager).
+-module(dtlsex_manager).
 -behaviour(gen_server).
 
 %% Internal application API
@@ -39,8 +39,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--include("ssl_handshake.hrl").
--include("ssl_internal.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_internal.hrl").
 -include_lib("kernel/include/file.hrl").
 
 -record(state, {
@@ -95,7 +95,7 @@ connection_init(Trustedcerts, Role) ->
 %%--------------------------------------------------------------------
 cache_pem_file(File, DbHandle) ->
     MD5 = crypto:hash(md5, File),
-    case ssl_certificate_db:lookup_cached_pem(DbHandle, MD5) of
+    case dtlsex_certificate_db:lookup_cached_pem(DbHandle, MD5) of
 	[{Content,_}] ->
 	    {ok, Content};
 	[Content] ->
@@ -111,7 +111,7 @@ cache_pem_file(File, DbHandle) ->
 %%--------------------------------------------------------------------
 clear_pem_cache() ->
     %% Not supported for distribution at the moement, should it be?
-    put(ssl_manager, ssl_manager),
+    put(dtlsex_manager, dtlsex_manager),
     call(unconditionally_clear_pem_cache).
 
 %%--------------------------------------------------------------------
@@ -123,7 +123,7 @@ clear_pem_cache() ->
 %% serialnumber(), issuer()}.
 %% --------------------------------------------------------------------
 lookup_trusted_cert(DbHandle, Ref, SerialNumber, Issuer) ->
-    ssl_certificate_db:lookup_trusted_cert(DbHandle, Ref, SerialNumber, Issuer).
+    dtlsex_certificate_db:lookup_trusted_cert(DbHandle, Ref, SerialNumber, Issuer).
 
 %%--------------------------------------------------------------------
 -spec new_session_id(integer()) -> session_id().
@@ -136,11 +136,11 @@ new_session_id(Port) ->
 %%--------------------------------------------------------------------
 -spec clean_cert_db(reference(), binary()) -> ok.
 %%
-%% Description: Send clean request of cert db to ssl_manager process should
+%% Description: Send clean request of cert db to dtlsex_manager process should
 %% be called by ssl-connection processes. 
 %%--------------------------------------------------------------------
 clean_cert_db(Ref, File) ->
-    erlang:send_after(?CLEAN_CERT_DB, get(ssl_manager), {clean_cert_db, Ref, File}),
+    erlang:send_after(?CLEAN_CERT_DB, get(dtlsex_manager), {clean_cert_db, Ref, File}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -180,12 +180,12 @@ invalidate_session(Port, Session) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([Name, Opts]) ->
-    put(ssl_manager, Name),
+    put(dtlsex_manager, Name),
     process_flag(trap_exit, true),
     CacheCb = proplists:get_value(session_cb, Opts, ssl_session_cache),
     SessionLifeTime =  
 	proplists:get_value(session_lifetime, Opts, ?'24H_in_sec'),
-    CertDb = ssl_certificate_db:create(),
+    CertDb = dtlsex_certificate_db:create(),
     SessionCache = CacheCb:init(proplists:get_value(session_cb_init_args, Opts, [])),
     Timer = erlang:send_after(SessionLifeTime * 1000 + 5000, 
 			      self(), validate_sessions),
@@ -218,7 +218,7 @@ handle_call({{connection_init, Trustedcerts, _Role}, Pid}, _From,
 		   session_cache = Cache} = State) ->
     Result = 
 	try
-	    {ok, Ref} = ssl_certificate_db:add_trusted_certs(Pid, Trustedcerts, Db),
+	    {ok, Ref} = dtlsex_certificate_db:add_trusted_certs(Pid, Trustedcerts, Db),
 	    {ok, Ref, CertDb, FileRefDb, PemChace, Cache}
 	catch
 	    _:Reason ->
@@ -235,7 +235,7 @@ handle_call({{new_session_id,Port}, _},
 
 handle_call({{cache_pem, File}, _Pid}, _,
 	    #state{certificate_db = Db} = State) ->
-    try ssl_certificate_db:cache_pem_file(File, Db) of
+    try dtlsex_certificate_db:cache_pem_file(File, Db) of
 	Result ->
 	    {reply, Result, State}
     catch 
@@ -243,7 +243,7 @@ handle_call({{cache_pem, File}, _Pid}, _,
 	    {reply, {error, Reason}, State}
     end;
 handle_call({unconditionally_clear_pem_cache, _},_, #state{certificate_db = [_,_,PemChace]} = State) ->
-    ssl_certificate_db:clear(PemChace),
+    dtlsex_certificate_db:clear(PemChace),
     {reply, ok,  State}.
 
 %%--------------------------------------------------------------------
@@ -306,11 +306,11 @@ handle_info({delayed_clean_session, Key}, #state{session_cache = Cache,
     {noreply, State};
 
 handle_info(clear_pem_cache, #state{certificate_db = [_,_,PemChace]} = State) ->
-    case ssl_certificate_db:db_size(PemChace) of
+    case dtlsex_certificate_db:db_size(PemChace) of
 	N  when N < ?NOT_TO_BIG ->
 	    ok;
 	_ ->
-	    ssl_certificate_db:clear(PemChace)
+	    dtlsex_certificate_db:clear(PemChace)
     end,
     erlang:send_after(?CLEAR_PEM_CACHE, self(), clear_pem_cache),
     {noreply, State};
@@ -319,7 +319,7 @@ handle_info(clear_pem_cache, #state{certificate_db = [_,_,PemChace]} = State) ->
 handle_info({clean_cert_db, Ref, File},
 	    #state{certificate_db = [CertDb,RefDb, PemCache]} = State) ->
     
-    case ssl_certificate_db:lookup(Ref, RefDb) of
+    case dtlsex_certificate_db:lookup(Ref, RefDb) of
 	undefined -> %% Alredy cleaned
 	    ok;
 	_ ->
@@ -348,7 +348,7 @@ terminate(_Reason, #state{certificate_db = Db,
 			  session_cache_cb = CacheCb,
 			  session_validation_timer = Timer}) ->
     erlang:cancel_timer(Timer),
-    ssl_certificate_db:remove(Db),
+    dtlsex_certificate_db:remove(Db),
     CacheCb:terminate(SessionCache),
     ok.
 
@@ -364,13 +364,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 call(Msg) ->
-    gen_server:call(get(ssl_manager), {Msg, self()}, infinity).
+    gen_server:call(get(dtlsex_manager), {Msg, self()}, infinity).
 
 cast(Msg) ->
-    gen_server:cast(get(ssl_manager), Msg).
+    gen_server:cast(get(dtlsex_manager), Msg).
  
 validate_session(Host, Port, Session, LifeTime) ->
-    case ssl_session:valid_session(Session, LifeTime) of
+    case dtlsex_session:valid_session(Session, LifeTime) of
 	true ->
 	    ok;
 	false ->
@@ -378,7 +378,7 @@ validate_session(Host, Port, Session, LifeTime) ->
     end.
 
 validate_session(Port, Session, LifeTime) ->
-    case ssl_session:valid_session(Session, LifeTime) of
+    case dtlsex_session:valid_session(Session, LifeTime) of
 	true ->
 	    ok;
 	false ->
@@ -387,10 +387,10 @@ validate_session(Port, Session, LifeTime) ->
 		    
 start_session_validator(Cache, CacheCb, LifeTime) ->
     spawn_link(?MODULE, init_session_validator, 
-	       [[get(ssl_manager), Cache, CacheCb, LifeTime]]).
+	       [[get(dtlsex_manager), Cache, CacheCb, LifeTime]]).
 
 init_session_validator([SslManagerName, Cache, CacheCb, LifeTime]) ->
-    put(ssl_manager, SslManagerName),
+    put(dtlsex_manager, SslManagerName),
     CacheCb:foldl(fun session_validation/2,
 		  LifeTime, Cache).
 
@@ -457,17 +457,17 @@ new_id(Port, Tries, Cache, CacheCb) ->
     end.
 
 clean_cert_db(Ref, CertDb, RefDb, PemCache, File) ->
-    case ssl_certificate_db:ref_count(Ref, RefDb, 0) of
+    case dtlsex_certificate_db:ref_count(Ref, RefDb, 0) of
 	0 ->	  
 	    MD5 = crypto:hash(md5, File),
-	    case ssl_certificate_db:lookup_cached_pem(PemCache, MD5) of
+	    case dtlsex_certificate_db:lookup_cached_pem(PemCache, MD5) of
 		[{Content, Ref}] ->
-		    ssl_certificate_db:insert(MD5, Content, PemCache);		
+		    dtlsex_certificate_db:insert(MD5, Content, PemCache);		
 		_ ->
 		    ok
 	    end,
-	    ssl_certificate_db:remove(Ref, RefDb),
-	    ssl_certificate_db:remove_trusted_certs(Ref, CertDb);
+	    dtlsex_certificate_db:remove(Ref, RefDb),
+	    dtlsex_certificate_db:remove_trusted_certs(Ref, CertDb);
 	_ ->
 	    ok
     end.

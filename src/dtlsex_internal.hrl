@@ -110,7 +110,7 @@
 	  debug,
 	  hibernate_after,% undefined if not hibernating,
                           % or number of ms of inactivity
-			  % after which ssl_connection will
+			  % after which dtlsex_connection will
                           % go into hibernation
 	  next_protocols_advertised = undefined, %% [binary()],
 	  next_protocol_selector = undefined  %% fun([binary()]) -> binary())

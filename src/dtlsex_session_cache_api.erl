@@ -19,9 +19,9 @@
 
 %%
 
--module(ssl_session_cache_api).
--include("ssl_handshake.hrl").
--include("ssl_internal.hrl").
+-module(dtlsex_session_cache_api).
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_internal.hrl").
 
 -type key() :: {{host(), inet:port_number()}, session_id()} |  {inet:port_number(), session_id()}.
 

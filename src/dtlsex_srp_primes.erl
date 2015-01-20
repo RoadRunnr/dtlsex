@@ -1,4 +1,4 @@
--module(ssl_srp_primes).
+-module(dtlsex_srp_primes).
 
 -export([get_srp_params/1, check_srp_params/2]).
 

@@ -23,7 +23,7 @@
 %% will send an sslv2 hello.
 %%----------------------------------------------------------------------
 
--module(ssl_ssl2).
+-module(dtlsex_ssl2).
              
 -export([client_random/2]).
 

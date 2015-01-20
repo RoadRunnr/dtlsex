@@ -22,11 +22,11 @@
 %% Purpose: Handles tls1 encryption.
 %%----------------------------------------------------------------------
 
--module(ssl_tls1).
+-module(dtlsex_tls1).
 
--include("ssl_cipher.hrl").
--include("ssl_internal.hrl").
--include("ssl_record.hrl").
+-include("dtlsex_cipher.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_record.hrl").
 
 -export([master_secret/4, finished/5, certificate_verify/3, mac_hash/7,
 	 setup_keys/8, suites/1, dtls_suites/1, prf/5,

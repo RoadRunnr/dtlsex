@@ -22,10 +22,10 @@
 %% Purpose: Handles ssl sessions
 %%----------------------------------------------------------------------
 
--module(ssl_session).
+-module(dtlsex_session).
 
--include("ssl_handshake.hrl").
--include("ssl_internal.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_internal.hrl").
 
 %% Internal application API
 -export([is_new/2, client_id/4, server_id/6, valid_session/2]).
@@ -71,7 +71,7 @@ valid_session(#session{time_stamp = TimeStamp}, LifeTime) ->
     Now - TimeStamp < LifeTime.
 
 server_id(Port, <<>>, _SslOpts, _Cert, _, _) ->
-    {ssl_manager:new_session_id(Port), undefined};
+    {dtlsex_manager:new_session_id(Port), undefined};
 server_id(Port, SuggestedId, Options, Cert, Cache, CacheCb) ->
     LifeTime = case application:get_env(ssl, session_lifetime) of
 		   {ok, Time} when is_integer(Time) -> Time;
@@ -83,7 +83,7 @@ server_id(Port, SuggestedId, Options, Cert, Cache, CacheCb) ->
 	{true, Resumed} ->
 	    {SuggestedId, Resumed};
 	{false, undefined} ->
-	    {ssl_manager:new_session_id(Port), undefined}
+	    {dtlsex_manager:new_session_id(Port), undefined}
     end.
 
 %%--------------------------------------------------------------------

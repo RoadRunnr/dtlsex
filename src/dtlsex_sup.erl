@@ -19,7 +19,7 @@
 
 %%
 
--module(ssl_sup).
+-module(dtlsex_sup).
 
 -behaviour(supervisor).
 
@@ -82,20 +82,20 @@ manager_opts() ->
 
 session_and_cert_manager_child_spec() ->
     Opts = manager_opts(),
-    Name = ssl_manager,  
-    StartFunc = {ssl_manager, start_link, [Opts]},
+    Name = dtlsex_manager,  
+    StartFunc = {dtlsex_manager, start_link, [Opts]},
     Restart = permanent, 
     Shutdown = 4000,
-    Modules = [ssl_manager],
+    Modules = [dtlsex_manager],
     Type = worker,
     {Name, StartFunc, Restart, Shutdown, Type, Modules}.
 
 connection_manager_child_spec() ->
-    Name = ssl_connection,  
-    StartFunc = {ssl_connection_sup, start_link, []},
+    Name = dtlsex_connection,  
+    StartFunc = {dtlsex_connection_sup, start_link, []},
     Restart = permanent, 
     Shutdown = 4000,
-    Modules = [ssl_connection],
+    Modules = [dtlsex_connection],
     Type = supervisor,
     {Name, StartFunc, Restart, Shutdown, Type, Modules}.
 

@@ -1,6 +1,6 @@
--module(ssl_socket).
+-module(dtlsex_socket).
 
--include("ssl_internal.hrl").
+-include("dtlsex_internal.hrl").
 
 -export([socket/3, setopts/3, getopts/3, peername/2, sockname/2, port/2]).
 

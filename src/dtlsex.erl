@@ -21,7 +21,7 @@
 
 %%% Purpose : Main API module for SSL.
 
--module(ssl).
+-module(dtlsex).
 
 -export([start/0, start/1, stop/0, transport_accept/1,
 	 transport_accept/2, ssl_accept/1, ssl_accept/2, ssl_accept/3,
@@ -33,18 +33,18 @@
 	 versions/0, versions/1, session_info/1, format_error/1,
 	 renegotiate/1, prf/5, clear_pem_cache/0, random_bytes/1, negotiated_next_protocol/1]).
 
--include("ssl_internal.hrl").
--include("ssl_record.hrl").
--include("ssl_cipher.hrl").
--include("ssl_handshake.hrl").
--include("ssl_srp_primes.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_cipher.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_srp_primes.hrl").
 
 -include_lib("public_key/include/public_key.hrl"). 
 
 %% Visible in API
 -export_type([connect_option/0, listen_option/0, ssl_option/0, transport_option/0,
-	      erl_cipher_suite/0, %% From ssl_cipher.hrl 
-	      tls_atom_version/0, %% From ssl_internal.hrl
+	      erl_cipher_suite/0, %% From dtls_cipher.hrl 
+	      tls_atom_version/0, %% From dtls_internal.hrl
 	      prf_random/0, sslsocket/0]).
 
 -record(config, {ssl,               %% SSL parameters
@@ -97,12 +97,12 @@
 start() ->
     application:start(crypto),
     application:start(public_key),
-    application:start(ssl).
+    application:start(dtlsex).
 
 start(Type) ->
     application:start(crypto, Type),
     application:start(public_key, Type),
-    application:start(ssl, Type).
+    application:start(dtlsex, Type).
 
 %%--------------------------------------------------------------------
 -spec stop() -> ok.
@@ -110,7 +110,7 @@ start(Type) ->
 %% Description: Stops the ssl application.
 %%--------------------------------------------------------------------
 stop() ->
-    application:stop(ssl).
+    application:stop(dtlsex).
 
 %%--------------------------------------------------------------------
 -spec connect(host() | port(), [connect_option()]) -> {ok, #sslsocket{}} |
@@ -131,14 +131,14 @@ connect(Socket, SslOptions0, Timeout) when ?IS_SOCKET(Socket) ->
     {Transport,_,_,_} = handle_option(cb_info, SslOptions0,
 					      {gen_tcp, tcp, tcp_closed, tcp_error}),
     EmulatedOptions = emulated_options(),
-    {ok, SocketValues} = ssl_socket:getopts(Transport, Socket, EmulatedOptions),
+    {ok, SocketValues} = dtlsex_socket:getopts(Transport, Socket, EmulatedOptions),
     try handle_options(SslOptions0 ++ SocketValues, client) of
 	{ok, #config{cb = CbInfo, ssl = SslOptions, emulated = EmOpts}} ->
 	   
-	    ok = ssl_socket:setopts(Transport, Socket, internal_inet_values()),
-	    case ssl_socket:peername(Transport, Socket) of
+	    ok = dtlsex_socket:setopts(Transport, Socket, internal_inet_values()),
+	    case dtlsex_socket:peername(Transport, Socket) of
 		{ok, {Address, Port}} ->
-		    ssl_connection:connect(Address, Port, Socket, 
+		    dtlsex_connection:connect(Address, Port, Socket, 
 					   {SslOptions, EmOpts},
 					   self(), CbInfo, Timeout);
 		{error, Error} ->
@@ -200,17 +200,17 @@ transport_accept(#sslsocket{pid = {ListenSocket, #config{cb = CbInfo, ssl = SslO
     %% and options should be inherited.
     EmOptions = emulated_options(),
     {Transport,_,_, _} = CbInfo,    
-    {ok, SocketValues} = ssl_socket:getopts(Transport, ListenSocket, EmOptions),
-    ok = ssl_socket:setopts(Transport, ListenSocket, internal_inet_values()),
+    {ok, SocketValues} = dtlsex_socket:getopts(Transport, ListenSocket, EmOptions),
+    ok = dtlsex_socket:setopts(Transport, ListenSocket, internal_inet_values()),
     case Transport:accept(ListenSocket, Timeout) of
 	{ok, Socket} ->
-	    ok = ssl_socket:setopts(Transport, ListenSocket, SocketValues),
-	    {ok, Port} = ssl_socket:port(Transport, Socket),
+	    ok = dtlsex_socket:setopts(Transport, ListenSocket, SocketValues),
+	    {ok, Port} = dtlsex_socket:port(Transport, Socket),
 	    ConnArgs = [server, "localhost", Port, Socket,
 			{SslOpts, socket_options(SocketValues)}, self(), CbInfo],
-	    case ssl_connection_sup:start_child(ConnArgs) of
+	    case dtlsex_connection_sup:start_child(ConnArgs) of
 		{ok, Pid} ->
-		    ssl_connection:socket_control(Socket, Pid, Transport);
+		    dtlsex_connection:socket_control(Socket, Pid, Transport);
 		{error, Reason} ->
 		    {error, Reason}
 	    end;
@@ -233,7 +233,7 @@ ssl_accept(ListenSocket) ->
     ssl_accept(ListenSocket, infinity).
 
 ssl_accept(#sslsocket{} = Socket, Timeout) ->
-    ssl_connection:handshake(Socket, Timeout);
+    dtlsex_connection:handshake(Socket, Timeout);
     
 ssl_accept(ListenSocket, SslOptions) ->
     ssl_accept(ListenSocket, SslOptions, infinity).
@@ -243,12 +243,12 @@ ssl_accept(Socket, SslOptions, Timeout) ->
 	handle_option(cb_info, SslOptions, {gen_tcp, tcp, tcp_closed, tcp_error}),
 
     EmulatedOptions = emulated_options(),
-    {ok, SocketValues} = ssl_socket:getopts(Transport, Socket, EmulatedOptions),
+    {ok, SocketValues} = dtlsex_socket:getopts(Transport, Socket, EmulatedOptions),
     try handle_options(SslOptions ++ SocketValues, server) of
 	{ok, #config{cb = CbInfo, ssl = SslOpts, emulated = EmOpts}} ->
-	    ok = ssl_socket:setopts(Transport, Socket, internal_inet_values()),
-	    {ok, Port} = ssl_socket:port(Transport, Socket),
-	    ssl_connection:ssl_accept(Port, Socket,
+	    ok = dtlsex_socket:setopts(Transport, Socket, internal_inet_values()),
+	    {ok, Port} = dtlsex_socket:port(Transport, Socket),
+	    dtlsex_connection:ssl_accept(Port, Socket,
 				      {SslOpts, EmOpts},
 				      self(), CbInfo, Timeout)
     catch 
@@ -261,7 +261,7 @@ ssl_accept(Socket, SslOptions, Timeout) ->
 %% Description: Close an ssl connection
 %%--------------------------------------------------------------------  
 close(#sslsocket{pid = Pid}) when is_pid(Pid) ->
-    ssl_connection:close(Pid);
+    dtlsex_connection:close(Pid);
 close(#sslsocket{pid = {ListenSocket, #config{cb={Transport,_, _, _}}}}) ->
     Transport:close(ListenSocket).
 
@@ -271,7 +271,7 @@ close(#sslsocket{pid = {ListenSocket, #config{cb={Transport,_, _, _}}}}) ->
 %% Description: Sends data over the ssl connection
 %%--------------------------------------------------------------------
 send(#sslsocket{pid = Pid}, Data) when is_pid(Pid) ->
-    ssl_connection:send(Pid, Data);
+    dtlsex_connection:send(Pid, Data);
 send(#sslsocket{pid = {ListenSocket, #config{cb={Transport, _, _, _}}}}, Data) ->
     Transport:send(ListenSocket, Data). %% {error,enotconn}
 
@@ -284,7 +284,7 @@ send(#sslsocket{pid = {ListenSocket, #config{cb={Transport, _, _, _}}}}, Data) -
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 recv(#sslsocket{pid = Pid}, Length, Timeout) when is_pid(Pid) ->
-    ssl_connection:recv(Pid, Length, Timeout);
+    dtlsex_connection:recv(Pid, Length, Timeout);
 recv(#sslsocket{pid = {Listen, 
 		       #config{cb={Transport, _, _, _}}}}, _,_) when ?IS_SOCKET(Listen)->
     Transport:recv(Listen, 0). %% {error,enotconn}
@@ -296,7 +296,7 @@ recv(#sslsocket{pid = {Listen,
 %% or once. 
 %%--------------------------------------------------------------------
 controlling_process(#sslsocket{pid = Pid}, NewOwner) when is_pid(Pid), is_pid(NewOwner) ->
-    ssl_connection:new_user(Pid, NewOwner);
+    dtlsex_connection:new_user(Pid, NewOwner);
 controlling_process(#sslsocket{pid = {Listen,
 				      #config{cb={Transport, _, _, _}}}}, 
 		    NewOwner) when ?IS_SOCKET(Listen),
@@ -310,7 +310,7 @@ controlling_process(#sslsocket{pid = {Listen,
 %% Description: Returns ssl protocol and cipher used for the connection
 %%--------------------------------------------------------------------
 connection_info(#sslsocket{pid = Pid}) when is_pid(Pid) ->
-    ssl_connection:info(Pid);
+    dtlsex_connection:info(Pid);
 connection_info(#sslsocket{pid = {Listen, _}}) when ?IS_SOCKET(Listen) ->
     {error, enotconn}.
 
@@ -320,9 +320,9 @@ connection_info(#sslsocket{pid = {Listen, _}}) when ?IS_SOCKET(Listen) ->
 %% Description: same as inet:peername/1.
 %%--------------------------------------------------------------------
 peername(#sslsocket{pid = Pid, fd = {Transport, Socket}}) when is_pid(Pid)->
-    ssl_socket:peername(Transport, Socket);
+    dtlsex_socket:peername(Transport, Socket);
 peername(#sslsocket{pid = {ListenSocket,  #config{cb = {Transport,_,_,_}}}}) ->
-    ssl_socket:peername(Transport, ListenSocket). %% Will return {error, enotconn}
+    dtlsex_socket:peername(Transport, ListenSocket). %% Will return {error, enotconn}
 
 %%--------------------------------------------------------------------
 -spec peercert(#sslsocket{}) ->{ok, DerCert::binary()} | {error, reason()}.
@@ -330,7 +330,7 @@ peername(#sslsocket{pid = {ListenSocket,  #config{cb = {Transport,_,_,_}}}}) ->
 %% Description: Returns the peercert.
 %%--------------------------------------------------------------------
 peercert(#sslsocket{pid = Pid}) when is_pid(Pid) ->
-    case ssl_connection:peer_certificate(Pid) of
+    case dtlsex_connection:peer_certificate(Pid) of
 	{ok, undefined} ->
 	    {error, no_peercert};
         Result ->
@@ -345,7 +345,7 @@ peercert(#sslsocket{pid = {Listen, _}}) when ?IS_SOCKET(Listen) ->
 %% Description: Return erlang cipher suite definition.
 %%--------------------------------------------------------------------
 suite_definition(S) ->
-    {KeyExchange, Cipher, Hash, _} = ssl_cipher:suite_definition(S),
+    {KeyExchange, Cipher, Hash, _} = dtlsex_cipher:suite_definition(S),
     {KeyExchange, Cipher, Hash}.
 
 %%--------------------------------------------------------------------
@@ -355,7 +355,7 @@ suite_definition(S) ->
 %% protocol has been negotiated will return {error, next_protocol_not_negotiated}
 %%--------------------------------------------------------------------
 negotiated_next_protocol(#sslsocket{pid = Pid}) ->
-    ssl_connection:negotiated_next_protocol(Pid).
+    dtlsex_connection:negotiated_next_protocol(Pid).
 
 -spec cipher_suites() -> [erl_cipher_suite()].
 -spec cipher_suites(erlang | openssl | all ) -> [erl_cipher_suite()] | [string()].
@@ -366,19 +366,19 @@ cipher_suites() ->
     cipher_suites(erlang).
   
 cipher_suites(erlang) ->
-    Version = ssl_record:highest_connection_protocol_version(stream),
+    Version = dtlsex_record:highest_connection_protocol_version(stream),
     [suite_definition(S) || S <- cipher_suites(Version, [])];
 
 cipher_suites(openssl) ->
-    Version = ssl_record:highest_connection_protocol_version(stream),
-    [ssl_cipher:openssl_suite_name(S) || S <- cipher_suites(Version, [])];
+    Version = dtlsex_record:highest_connection_protocol_version(stream),
+    [dtlsex_cipher:openssl_suite_name(S) || S <- cipher_suites(Version, [])];
 
 cipher_suites(all) ->
-    Version = ssl_record:highest_connection_protocol_version(stream),
-    Supported = ssl_cipher:suites(Version)
-	++ ssl_cipher:anonymous_suites(Version)
-	++ ssl_cipher:psk_suites(Version)
-	++ ssl_cipher:srp_suites(),
+    Version = dtlsex_record:highest_connection_protocol_version(stream),
+    Supported = dtlsex_cipher:suites(Version)
+	++ dtlsex_cipher:anonymous_suites(Version)
+	++ dtlsex_cipher:psk_suites(Version)
+	++ dtlsex_cipher:srp_suites(),
     [suite_definition(S) || S <- Supported].
 %%--------------------------------------------------------------------
 -spec getopts(#sslsocket{}, [gen_tcp:option_name()]) ->
@@ -387,10 +387,10 @@ cipher_suites(all) ->
 %% Description: Gets options
 %%--------------------------------------------------------------------
 getopts(#sslsocket{pid = Pid}, OptionTags) when is_pid(Pid), is_list(OptionTags) ->
-    ssl_connection:get_opts(Pid, OptionTags);
+    dtlsex_connection:get_opts(Pid, OptionTags);
 getopts(#sslsocket{pid = {ListenSocket,  #config{cb = {Transport,_,_,_}}}}, 
 	OptionTags) when is_list(OptionTags) ->
-    try ssl_socket:getopts(Transport, ListenSocket, OptionTags) of
+    try dtlsex_socket:getopts(Transport, ListenSocket, OptionTags) of
 	{ok, _} = Result ->
 	    Result;
 	{error, InetError} ->
@@ -411,14 +411,14 @@ setopts(#sslsocket{pid = Pid}, Options0) when is_pid(Pid), is_list(Options0)  ->
     try proplists:expand([{binary, [{mode, binary}]},
 			  {list, [{mode, list}]}], Options0) of
 	Options ->
-	    ssl_connection:set_opts(Pid, Options)
+	    dtlsex_connection:set_opts(Pid, Options)
     catch
 	_:_ ->
 	    {error, {options, {not_a_proplist, Options0}}}
     end;
 
 setopts(#sslsocket{pid = {ListenSocket, #config{cb = {Transport,_,_,_}}}}, Options) when is_list(Options) ->
-    try ssl_socket:setopts(Transport, ListenSocket, Options) of
+    try dtlsex_socket:setopts(Transport, ListenSocket, Options) of
 	ok ->
 	    ok;
 	{error, InetError} ->
@@ -439,7 +439,7 @@ shutdown(#sslsocket{pid = {Listen, #config{cb={Transport,_, _, _}}}},
 	 How) when ?IS_SOCKET(Listen) ->
     Transport:shutdown(Listen, How);
 shutdown(#sslsocket{pid = Pid}, How) ->
-    ssl_connection:shutdown(Pid, How).
+    dtlsex_connection:shutdown(Pid, How).
 
 %%--------------------------------------------------------------------
 -spec sockname(#sslsocket{}) -> {ok, {inet:ip_address(), inet:port_number()}} | {error, reason()}.
@@ -447,10 +447,10 @@ shutdown(#sslsocket{pid = Pid}, How) ->
 %% Description: Same as inet:sockname/1
 %%--------------------------------------------------------------------
 sockname(#sslsocket{pid = {Listen,  #config{cb={Transport,_, _, _}}}}) when ?IS_SOCKET(Listen) ->
-    ssl_socket:sockname(Transport, Listen);
+    dtlsex_socket:sockname(Transport, Listen);
 
 sockname(#sslsocket{pid = Pid, fd = {Transport, Socket}}) when is_pid(Pid) ->
-    ssl_socket:sockname(Transport, Socket).
+    dtlsex_socket:sockname(Transport, Socket).
 
 %%---------------------------------------------------------------
 -spec session_info(#sslsocket{}) -> {ok, list()} | {error, reason()}.
@@ -459,7 +459,7 @@ sockname(#sslsocket{pid = Pid, fd = {Transport, Socket}}) when is_pid(Pid) ->
 %% {cipher_suite, cipher_suite()}]
 %%--------------------------------------------------------------------
 session_info(#sslsocket{pid = Pid}) when is_pid(Pid) ->
-    ssl_connection:session_info(Pid);
+    dtlsex_connection:session_info(Pid);
 session_info(#sslsocket{pid = {Listen,_}}) when ?IS_SOCKET(Listen) ->
     {error, enotconn}.
 
@@ -470,13 +470,13 @@ session_info(#sslsocket{pid = {Listen,_}}) when ?IS_SOCKET(Listen) ->
 %% Description: Returns a list of relevant versions.
 %%--------------------------------------------------------------------
 versions(ConnType) ->
-    Vsns = ssl_record:supported_protocol_versions(ConnType),
-    SupportedVsns = [ssl_record:protocol_version(Vsn) || Vsn <- Vsns],
+    Vsns = dtlsex_record:supported_protocol_versions(ConnType),
+    SupportedVsns = [dtlsex_record:protocol_version(Vsn) || Vsn <- Vsns],
     AvailableVsns = case ConnType of
 			datagram -> ?ALL_DATAGRAM_SUPPORTED_VERSIONS;
 			stream   -> ?ALL_STREAM_SUPPORTED_VERSIONS
 		    end,
-    [{ssl_app, ?VSN}, {supported, SupportedVsns}, {available, AvailableVsns}].
+    [{ssl_app, "1.0.0"}, {supported, SupportedVsns}, {available, AvailableVsns}].
 
 %%---------------------------------------------------------------
 -spec versions() -> [{ssl_app, string()} | {supported, [tls_atom_version()]} |
@@ -493,7 +493,7 @@ versions() ->
 %% Description: Initiates a renegotiation.
 %%--------------------------------------------------------------------
 renegotiate(#sslsocket{pid = Pid}) when is_pid(Pid) ->
-    ssl_connection:renegotiation(Pid);
+    dtlsex_connection:renegotiation(Pid);
 renegotiate(#sslsocket{pid = {Listen,_}}) when ?IS_SOCKET(Listen) ->
     {error, enotconn}.
 
@@ -506,7 +506,7 @@ renegotiate(#sslsocket{pid = {Listen,_}}) when ?IS_SOCKET(Listen) ->
 %%--------------------------------------------------------------------
 prf(#sslsocket{pid = Pid},
     Secret, Label, Seed, WantedLength) when is_pid(Pid) ->
-    ssl_connection:prf(Pid, Secret, Label, Seed, WantedLength);
+    dtlsex_connection:prf(Pid, Secret, Label, Seed, WantedLength);
 prf(#sslsocket{pid = {Listen,_}}, _,_,_,_) when ?IS_SOCKET(Listen) ->
     {error, enotconn}.
 
@@ -516,7 +516,7 @@ prf(#sslsocket{pid = {Listen,_}}, _,_,_,_) when ?IS_SOCKET(Listen) ->
 %% Description: Clear the PEM cache
 %%--------------------------------------------------------------------
 clear_pem_cache() ->
-    ssl_manager:clear_pem_cache().
+    dtlsex_manager:clear_pem_cache().
 
 %%---------------------------------------------------------------
 -spec format_error({error, term()}) -> list().
@@ -578,7 +578,7 @@ do_connect(Address, Port,
     {Transport, _, _, _} = CbInfo,    
     try Transport:connect(Address, Port,  SocketOpts, Timeout) of
 	{ok, Socket} ->
-	    ssl_connection:connect(Address, Port, Socket, {SslOpts,EmOpts},
+	    dtlsex_connection:connect(Address, Port, Socket, {SslOpts,EmOpts},
 				   self(), CbInfo, Timeout);
 	{error, Reason} ->
 	    {error, Reason}
@@ -642,9 +642,9 @@ handle_options(Opts0, _Role) ->
 
     Versions = case handle_option(versions, Opts, []) of
 		   [] ->
-		       ssl_record:supported_protocol_versions(ConnType);
+		       dtlsex_record:supported_protocol_versions(ConnType);
 		   Vsns  ->
-		       [ssl_record:protocol_version(Vsn) || Vsn <- Vsns]
+		       [dtlsex_record:protocol_version(Vsn) || Vsn <- Vsns]
 	       end,  
 
     SSLOptions = #ssl_options{
@@ -806,7 +806,7 @@ validate_option(srp_identity, {Username, Password})
   when is_list(Username), is_list(Password), Username =/= "", length(Username) =< 255 ->
     {list_to_binary(Username), list_to_binary(Password)};
 validate_option(ciphers, Value)  when is_list(Value) ->
-    Version = ssl_record:highest_connection_protocol_version(stream),
+    Version = dtlsex_record:highest_connection_protocol_version(stream),
     try cipher_suites(Version, Value)
     catch
 	exit:_ ->
@@ -832,7 +832,7 @@ validate_option(hibernate_after, Value) when is_integer(Value), Value >= 0 ->
     Value;
 validate_option(client_preferred_next_protocols = Opt, {Precedence, PreferredProtocols} = Value)
   when is_list(PreferredProtocols) ->
-    case ssl_record:highest_connection_protocol_version(stream) of
+    case dtlsex_record:highest_connection_protocol_version(stream) of
 	{3,0} ->
 	    throw({error, {options, {not_supported_in_sslv3, {Opt, Value}}}});
 	_ ->
@@ -843,7 +843,7 @@ validate_option(client_preferred_next_protocols = Opt, {Precedence, PreferredPro
 validate_option(client_preferred_next_protocols = Opt, {Precedence, PreferredProtocols, Default} = Value)
       when is_list(PreferredProtocols), is_binary(Default),
            byte_size(Default) > 0, byte_size(Default) < 256 ->
-    case ssl_record:highest_connection_protocol_version(stream) of
+    case dtlsex_record:highest_connection_protocol_version(stream) of
 	{3,0} ->
 	    throw({error, {options, {not_supported_in_sslv3, {Opt, Value}}}});
 	_ ->
@@ -855,7 +855,7 @@ validate_option(client_preferred_next_protocols = Opt, {Precedence, PreferredPro
 validate_option(client_preferred_next_protocols, undefined) ->
     undefined;
 validate_option(next_protocols_advertised = Opt, Value) when is_list(Value) ->
-    case ssl_record:highest_connection_protocol_version(stream) of
+    case dtlsex_record:highest_connection_protocol_version(stream) of
 	{3,0} ->
 	    throw({error, {options, {not_supported_in_sslv3, {Opt, Value}}}});
 	_ ->
@@ -972,19 +972,19 @@ emulated_options([], Inet,Emulated) ->
     {Inet, Emulated}.
 
 cipher_suites(Version, []) ->
-    ssl_cipher:filter_suites(ssl_cipher:suites(Version));
+    dtlsex_cipher:filter_suites(dtlsex_cipher:suites(Version));
 cipher_suites(Version, [{_,_,_,_}| _] = Ciphers0) -> %% Backwards compatibility
     Ciphers = [{KeyExchange, Cipher, Hash} || {KeyExchange, Cipher, Hash, _} <- Ciphers0],
-    ssl_cipher:filter_suites(cipher_suites(Version, Ciphers));
+    dtlsex_cipher:filter_suites(cipher_suites(Version, Ciphers));
 cipher_suites(Version, [{_,_,_}| _] = Ciphers0) ->
-    Ciphers = [ssl_cipher:suite(C) || C <- Ciphers0],
-    ssl_cipher:filter_suites(cipher_suites(Version, Ciphers));
+    Ciphers = [dtlsex_cipher:suite(C) || C <- Ciphers0],
+    dtlsex_cipher:filter_suites(cipher_suites(Version, Ciphers));
 cipher_suites(Version, [Cipher0 | _] = Ciphers0) when is_binary(Cipher0) ->
-    Supported0 = ssl_cipher:suites(Version)
-	++ ssl_cipher:anonymous_suites(Version)
-	++ ssl_cipher:psk_suites(Version)
-	++ ssl_cipher:srp_suites(),
-    Supported1 = ssl_cipher:filter_suites(Supported0),
+    Supported0 = dtlsex_cipher:suites(Version)
+	++ dtlsex_cipher:anonymous_suites(Version)
+	++ dtlsex_cipher:psk_suites(Version)
+	++ dtlsex_cipher:srp_suites(),
+    Supported1 = dtlsex_cipher:filter_suites(Supported0),
     case [Cipher || Cipher <- Ciphers0, lists:member(Cipher, Supported1)] of
 	[] ->
 	    Supported1;
@@ -993,11 +993,11 @@ cipher_suites(Version, [Cipher0 | _] = Ciphers0) when is_binary(Cipher0) ->
     end;
 cipher_suites(Version, [Head | _] = Ciphers0) when is_list(Head) ->
     %% Format: ["RC4-SHA","RC4-MD5"]
-    Ciphers = [ssl_cipher:openssl_suite(C) || C <- Ciphers0],
+    Ciphers = [dtlsex_cipher:openssl_suite(C) || C <- Ciphers0],
     cipher_suites(Version, Ciphers); 
 cipher_suites(Version, Ciphers0)  ->
     %% Format: "RC4-SHA:RC4-MD5"
-    Ciphers = [ssl_cipher:openssl_suite(C) || C <- string:tokens(Ciphers0, ":")],
+    Ciphers = [dtlsex_cipher:openssl_suite(C) || C <- string:tokens(Ciphers0, ":")],
     cipher_suites(Version, Ciphers).
 
 unexpected_format(Error) ->    

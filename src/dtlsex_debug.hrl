@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2009. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -19,18 +19,21 @@
 
 %%
 
-%%% Purpose : Application master for SSL.
 
--module(ssl_app).
+-ifndef(ssl_debug).
+-define(ssl_debug, true).
 
--behaviour(application).
+-ifdef(SSL_DEBUG).
+-define(DBG_HEX(V), dtlsex_debug:hex_data(??V, V, ?MODULE, ?LINE)).
+-define(DBG_TERM(T), dtlsex_debug:term_data(??T, T, ?MODULE, ?LINE)).
+-else.
+-define(DBG_HEX(V), ok).
+-define(DBG_TERM(T), ok).
+-endif.
 
--export([start/2, stop/1]).
+-endif. % -ifdef(ssl_debug).
 
-start(_Type, _StartArgs) ->
-    ssl_sup:start_link().
 
-stop(_State) ->
-    ok.
+
 
 

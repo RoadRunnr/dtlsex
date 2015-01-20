@@ -23,11 +23,11 @@
 %% calls functions in this module is described in RFC 3280. 
 %%----------------------------------------------------------------------
 
--module(ssl_certificate).
+-module(dtlsex_certificate).
 
--include("ssl_handshake.hrl").
--include("ssl_alert.hrl").
--include("ssl_internal.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_alert.hrl").
+-include("dtlsex_internal.hrl").
 -include_lib("public_key/include/public_key.hrl"). 
 
 -export([trusted_cert_and_path/3,
@@ -82,7 +82,7 @@ trusted_cert_and_path(CertChain, CertDbHandle, CertDbRef) ->
 	{self, _} when length(Path) == 1 ->
 	    {selfsigned_peer, Path};
 	{_ ,{SerialNr, Issuer}} ->
-	    case ssl_manager:lookup_trusted_cert(CertDbHandle, CertDbRef, SerialNr, Issuer) of
+	    case dtlsex_manager:lookup_trusted_cert(CertDbHandle, CertDbRef, SerialNr, Issuer) of
 		{ok, {BinCert,_}} ->
 		    {BinCert, Path};
 		_ ->
@@ -108,7 +108,7 @@ certificate_chain(OwnCert, CertDbHandle, CertsDbRef) ->
 %% Description: Return list of DER encoded certificates.
 %%--------------------------------------------------------------------
 file_to_certificats(File, DbHandle) ->
-    {ok, List} = ssl_manager:cache_pem_file(File, DbHandle),
+    {ok, List} = dtlsex_manager:cache_pem_file(File, DbHandle),
     [Bin || {'Certificate', Bin, not_encrypted} <- List].
 %%--------------------------------------------------------------------
 -spec validate_extension(term(), {extension, #'Extension'{}} | {bad_cert, atom()} | valid,
@@ -213,7 +213,7 @@ certificate_chain(_,_, Chain, _SerialNr, _Issuer, true) ->
     {ok, lists:reverse(Chain)};
 
 certificate_chain(CertDbHandle, CertsDbRef, Chain, SerialNr, Issuer, _SelfSigned) ->
-    case ssl_manager:lookup_trusted_cert(CertDbHandle, CertsDbRef,
+    case dtlsex_manager:lookup_trusted_cert(CertDbHandle, CertsDbRef,
 						SerialNr, Issuer) of
 	{ok, {IssuerCert, ErlCert}} ->
 	    ErlCert = public_key:pkix_decode_cert(IssuerCert, otp),
@@ -240,7 +240,7 @@ find_issuer(OtpCert, CertDbHandle) ->
 			  Acc
 		  end,
 
-    try ssl_certificate_db:foldl(IsIssuerFun, issuer_not_found, CertDbHandle) of
+    try dtlsex_certificate_db:foldl(IsIssuerFun, issuer_not_found, CertDbHandle) of
 	issuer_not_found ->
 	    {error, issuer_not_found}
     catch 

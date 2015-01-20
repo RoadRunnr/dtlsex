@@ -23,7 +23,7 @@
 %% Purpose : UDP API Wrapper
 %%----------------------------------------------------------------------
 
--module(ssl_udp).
+-module(dtlsex_udp).
 
 -behavior(gen_server).
 
@@ -36,7 +36,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--include("ssl_internal.hrl").
+-include("dtlsex_internal.hrl").
 
 -define(PROTOCOL, ?MODULE).
 
@@ -318,7 +318,7 @@ handle_accept(IpKey = {Address, Port}, Packet,
 			      ip_conns = IpConns0, ssl_conns = SslConns0,
 			      state = accepting,
 			      accepting = Accepting}) ->
-    case ssl_datagram:handle_packet(Address, Port, Packet) of
+    case dtlsex_datagram:handle_packet(Address, Port, Packet) of
 	{reply, Data} ->
 	    gen_udp:send(Socket, Address, Port, Data),
 	    State0;

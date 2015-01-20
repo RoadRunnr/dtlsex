@@ -22,11 +22,11 @@
 %% Purpose: Handles sslv3 encryption.
 %%----------------------------------------------------------------------
 
--module(ssl_ssl3).
+-module(dtlsex_ssl3).
 
--include("ssl_cipher.hrl").
--include("ssl_internal.hrl").
--include("ssl_record.hrl"). 			% MD5 and SHA
+-include("dtlsex_cipher.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_record.hrl"). 			% MD5 and SHA
 
 -export([master_secret/3, finished/3, certificate_verify/3,
 	 mac_hash/6, setup_keys/7, 

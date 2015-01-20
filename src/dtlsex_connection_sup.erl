@@ -21,7 +21,7 @@
 %%----------------------------------------------------------------------
 %% Purpose: The top supervisor for the ftp hangs under inets_sup.
 %%----------------------------------------------------------------------
--module(ssl_connection_sup).
+-module(dtlsex_connection_sup).
 
 -behaviour(supervisor).
 
@@ -50,10 +50,10 @@ init(_O) ->
     MaxT = 3600,
    
     Name = undefined, % As simple_one_for_one is used.
-    StartFunc = {ssl_connection, start_link, []},
+    StartFunc = {dtlsex_connection, start_link, []},
     Restart = temporary, % E.g. should not be restarted
     Shutdown = 4000,
-    Modules = [ssl_connection],
+    Modules = [dtlsex_connection],
     Type = worker,
     
     ChildSpec = {Name, StartFunc, Restart, Shutdown, Type, Modules},

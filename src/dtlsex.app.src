@@ -1,0 +1,34 @@
+{application, dtlsex,
+   [{description, "Erlang/OTP DTLS application"},
+    {vsn, "1.0.0"},
+    {modules, [dtlsex,
+	       dtlsex_app,
+	       dtlsex_sup,
+	       dtlsex_tls1,
+	       dtlsex_dtlsex3,
+	       dtlsex_dtlsex2,
+	       dtlsex_session,
+	       dtlsex_session_cache_api,
+	       dtlsex_session_cache,
+	       dtlsex_socket,
+	       dtlsex_record,
+	       dtlsex_manager,
+	       dtlsex_handshake,
+	       dtlsex_connection_sup,
+	       dtlsex_connection,
+	       dtlsex_cipher,
+	       dtlsex_srp_primes,
+	       dtlsex_certificate_db,
+	       dtlsex_certificate,
+	       dtlsex_alert,
+	       dtlsex_udp,
+	       dtlsex_datagram
+	       ]},
+    {registered, [dtlsex_sup, dtlsex_manager]},
+    {applications, [crypto, public_key, kernel, stdlib]},
+    {env, []},
+    {mod, {dtlsex_app, []}}]}.
+
+
+
+

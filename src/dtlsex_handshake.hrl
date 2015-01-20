@@ -89,7 +89,7 @@
 	  }).
 
 %% enum { null(0), (255) } CompressionMethod;
-% -define(NULL, 0). %% Already defined by ssl_internal.hrl
+% -define(NULL, 0). %% Already defined by dtls_internal.hrl
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Hello messages - RFC 4346 section 7.4.2

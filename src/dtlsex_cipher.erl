@@ -23,13 +23,13 @@
 %% 
 %%----------------------------------------------------------------------
 
--module(ssl_cipher).
+-module(dtlsex_cipher).
 
--include("ssl_internal.hrl").
--include("ssl_record.hrl").
--include("ssl_cipher.hrl").
--include("ssl_handshake.hrl").
--include("ssl_alert.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_cipher.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_alert.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -export([security_parameters/3, suite_definition/1,
@@ -196,11 +196,11 @@ block_decipher(Fun, #cipher_state{key=Key, iv=IV} = CipherState0,
 %% Description: Returns a list of supported cipher suites.
 %%--------------------------------------------------------------------
 suites({3, 0}) ->
-    ssl_ssl3:suites();
+    dtlsex_ssl3:suites();
 suites({3, N}) ->
-    ssl_tls1:suites(N);
+    dtlsex_tls1:suites(N);
 suites({254, N}) ->
-    ssl_tls1:dtls_suites(N).
+    dtlsex_tls1:dtls_suites(N).
 
 %%--------------------------------------------------------------------
 -spec anonymous_suites(tls_version()) -> [cipher_suite()].
@@ -1108,7 +1108,7 @@ filter(DerCert, Ciphers) ->
     PubKeyAlg = PubKeyInfo#'OTPSubjectPublicKeyInfo'.algorithm,
 
     Ciphers1 =
-	case ssl_certificate:public_key_type(PubKeyAlg#'PublicKeyAlgorithm'.algorithm) of
+	case dtlsex_certificate:public_key_type(PubKeyAlg#'PublicKeyAlgorithm'.algorithm) of
 	    rsa ->
 		filter_keyuse(OtpCert, ((Ciphers -- dsa_signed_suites()) -- ec_keyed_suites()) -- ecdh_suites(),
 			      rsa_suites(), dhe_rsa_suites() ++ ecdhe_rsa_suites());
@@ -1152,7 +1152,7 @@ filter_suites(Suites = [{_,_,_,_}|_]) ->
 filter_suites(Suites) ->
     Algos = crypto:algorithms(),
     lists:filter(fun(Suite) ->
-			 {KeyExchange, Cipher, Hash, Prf} = ssl_cipher:suite_definition(Suite),
+			 {KeyExchange, Cipher, Hash, Prf} = dtlsex_cipher:suite_definition(Suite),
 			 is_acceptable_keyexchange(KeyExchange, Algos) andalso
 			     is_acceptable_cipher(Cipher, Algos) andalso
 			     is_acceptable_hash(Hash, Algos) andalso
@@ -1390,7 +1390,7 @@ get_padding_aux(BlockSize, PadLength) ->
 
 random_iv(IV) ->
     IVSz = byte_size(IV),
-    ssl:random_bytes(IVSz).
+    dtlsex:random_bytes(IVSz).
 
 next_iv(Bin, IV) ->
     BinSz = byte_size(Bin),
@@ -1505,8 +1505,8 @@ ecdhe_ecdsa_suites() ->
 filter_keyuse(OtpCert, Ciphers, Suites, SignSuites) ->
     TBSCert = OtpCert#'OTPCertificate'.tbsCertificate, 
     TBSExtensions = TBSCert#'OTPTBSCertificate'.extensions,
-    Extensions = ssl_certificate:extensions_list(TBSExtensions),
-    case ssl_certificate:select_extension(?'id-ce-keyUsage', Extensions) of
+    Extensions = dtlsex_certificate:extensions_list(TBSExtensions),
+    case dtlsex_certificate:select_extension(?'id-ce-keyUsage', Extensions) of
 	undefined ->
 	    Ciphers;
 	#'Extension'{extnValue = KeyUse} ->
@@ -1517,7 +1517,7 @@ filter_keyuse(OtpCert, Ciphers, Suites, SignSuites) ->
     end.
 
 filter_keyuse_suites(Use, KeyUse, CipherSuits, Suites) ->
-    case ssl_certificate:is_valid_key_usage(KeyUse, Use) of
+    case dtlsex_certificate:is_valid_key_usage(KeyUse, Use) of
 	true ->
 	    CipherSuits;
 	false ->

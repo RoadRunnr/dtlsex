@@ -21,9 +21,9 @@
 %% Purpose: Storage for trusted certificates 
 %%----------------------------------------------------------------------
 
--module(ssl_certificate_db).
+-module(dtlsex_certificate_db).
 
--include("ssl_internal.hrl").
+-include("dtlsex_internal.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("kernel/include/file.hrl").
 
@@ -47,11 +47,11 @@
 create() ->
     [%% Let connection process delete trusted certs
      %% that can only belong to one connection. (Supplied directly
-     %% on DER format to ssl:connect/listen.)
-     ets:new(ssl_otp_cacertificate_db, [set, public]),
+     %% on DER format to dtlsex:connect/listen.)
+     ets:new(dtlsex_otp_cacertificate_db, [set, public]),
      %% Let connection processes call ref_count/3 directly
-     ets:new(ssl_otp_ca_file_ref, [set, public]),
-     ets:new(ssl_otp_pem_cache, [set, protected])
+     ets:new(dtlsex_otp_ca_file_ref, [set, public]),
+     ets:new(dtlsex_otp_pem_cache, [set, protected])
     ].
 
 %%--------------------------------------------------------------------

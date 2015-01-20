@@ -25,17 +25,17 @@
 %% sent according to the SSL-record protocol.  
 %%----------------------------------------------------------------------
 
--module(ssl_connection).
+-module(dtlsex_connection).
 
 -behaviour(gen_fsm).
 
--include("ssl_handshake.hrl").
--include("ssl_alert.hrl").
--include("ssl_record.hrl").
--include("ssl_cipher.hrl"). 
--include("ssl_internal.hrl").
--include("ssl_srp.hrl").
--include("ssl_srp_primes.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_alert.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_cipher.hrl"). 
+-include("dtlsex_internal.hrl").
+-include("dtlsex_srp.hrl").
+-include("dtlsex_srp_primes.hrl").
 -include_lib("public_key/include/public_key.hrl"). 
 
 %% Internal application API
@@ -44,7 +44,7 @@
 	 new_user/2, get_opts/2, set_opts/2, info/1, session_info/1, 
 	 peer_certificate/1, renegotiation/1, negotiated_next_protocol/1, prf/5]).
 
-%% Called by ssl_connection_sup
+%% Called by dtlsex_connection_sup
 -export([start_link/7]). 
 
 %% gen_fsm callbacks
@@ -70,7 +70,7 @@
           socket,             % socket() 
           ssl_options,        % #ssl_options{}
           socket_options,     % #socket_options{}
-          connection_states,  % #connection_states{} from ssl_record.hrl
+          connection_states,  % #connection_states{} from dtls_record.hrl
 	  message_sequences = #message_sequences{},
 	  tls_packets = [],        % Not yet handled decode ssl/tls packets.
           tls_record_buffer,  % binary() buffer of incomplete records
@@ -86,7 +86,7 @@
 	  flight_state,
 	  flight_buffer,        % buffer of not yet ACKed TLS records
 	  cert_db,              %
-          session,              % #session{} from ssl_handshake.hrl
+          session,              % #session{} from dtls_handshake.hrl
 	  session_cache,        % 
 	  session_cache_cb,     %
           negotiated_version,   % tls_version()
@@ -215,7 +215,7 @@ handshake(#sslsocket{pid = Pid}, Timeout) ->
 socket_control(Socket, Pid, Transport) ->
     case Transport:controlling_process(Socket, Pid) of
 	ok ->
-	    {ok, ssl_socket:socket(Pid, Transport, Socket)};
+	    {ok, dtlsex_socket:socket(Pid, Transport, Socket)};
 	{error, Reason}	->
 	    {error, Reason}
     end.
@@ -307,7 +307,7 @@ renegotiation(ConnectionPid) ->
 
 %%--------------------------------------------------------------------
 -spec prf(pid(), binary() | 'master_secret', binary(),
-	  binary() | ssl:prf_random(), non_neg_integer()) ->
+	  binary() | dtlsex:prf_random(), non_neg_integer()) ->
 		 {ok, binary()} | {error, reason()} | {'EXIT', term()}.
 %%
 %% Description: use a ssl sessions TLS PRF to generate key material
@@ -316,7 +316,7 @@ prf(ConnectionPid, Secret, Label, Seed, WantedLength) ->
     sync_send_all_state_event(ConnectionPid, {prf, Secret, Label, Seed, WantedLength}).
 
 %%====================================================================
-%% ssl_connection_sup API
+%% dtlsex_connection_sup API
 %%====================================================================
 
 %%--------------------------------------------------------------------
@@ -332,7 +332,7 @@ start_link(Role, Host, Port, Socket, Options, User, CbInfo) ->
 
 init([Role, Host, Port, Socket, {SSLOpts0, _} = Options,  User, CbInfo]) ->
     State0 = initial_state(Role, Host, Port, Socket, Options, User, CbInfo),
-    Handshake = ssl_handshake:init_handshake_history(),
+    Handshake = dtlsex_handshake:init_handshake_history(),
     TimeStamp = calendar:datetime_to_gregorian_seconds({date(), time()}),
     try ssl_init(SSLOpts0, Role) of
 	{ok, Ref, CertDbHandle, FileRefHandle, CacheHandle, OwnCert, Key, DHParams} ->
@@ -373,14 +373,14 @@ hello(start, #state{host = Host, port = Port, role = client,
 			      connection_states = ConnectionStates0,
 			      renegotiation = {Renegotiation, _},
 			      client_cookie = Cookie} = State0) ->
-    Hello = ssl_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
+    Hello = dtlsex_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
 				       Cache, CacheCb, Renegotiation, Cert),
     
     Version = Hello#client_hello.client_version,
     State1 = State0#state{negotiated_version = Version, %% Requested version
 			  session =
 			      Session0#session{session_id = Hello#client_hello.session_id},
-			  tls_handshake_history = ssl_handshake:init_handshake_history()},
+			  tls_handshake_history = dtlsex_handshake:init_handshake_history()},
 
     State2 = send_flight(Hello, waiting, State1),
 
@@ -404,12 +404,12 @@ hello(#server_hello{cipher_suite = CipherSuite,
 	     renegotiation = {Renegotiation, _},
 	     ssl_options = SslOptions} = State1) ->
     State0 = flight_done(State1),
-    case ssl_handshake:hello(Hello, SslOptions, ConnectionStates0, Renegotiation) of
+    case dtlsex_handshake:hello(Hello, SslOptions, ConnectionStates0, Renegotiation) of
 	#alert{} = Alert ->
 	    handle_own_alert(Alert, ReqVersion, hello, State0);
 	{Version, NewId, ConnectionStates, NextProtocol} ->
 	    {KeyAlgorithm, _, _, _} =
-		ssl_cipher:suite_definition(CipherSuite),
+		dtlsex_cipher:suite_definition(CipherSuite),
 
 	    PremasterSecret = make_premaster_secret(ReqVersion, KeyAlgorithm),
 	    
@@ -428,7 +428,7 @@ hello(#server_hello{cipher_suite = CipherSuite,
 				 expecting_next_protocol_negotiation = NextProtocol =/= undefined,
 				 next_protocol = NewNextProtocol},
 	    
-	    case ssl_session:is_new(OldId, NewId) of
+	    case dtlsex_session:is_new(OldId, NewId) of
 		true ->
 		    handle_new_session(NewId, CipherSuite, Compression,
 				       State#state{connection_states = ConnectionStates});
@@ -444,10 +444,10 @@ hello(#hello_verify_request{cookie = Cookie},
 	     ssl_options = SslOpts,
 	     connection_states = ConnectionStates0,
 	     renegotiation = {Renegotiation, _}} = State0) ->
-    Hello = ssl_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
+    Hello = dtlsex_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
 				       Cache, CacheCb, Renegotiation, Cert),
     State1 = State0#state{
-	       tls_handshake_history = ssl_handshake:init_handshake_history(),
+	       tls_handshake_history = dtlsex_handshake:init_handshake_history(),
 	       client_cookie = Cookie},
     State2 = send_flight(Hello, waiting, State1),
 
@@ -461,7 +461,7 @@ hello(Hello = #client_hello{client_version = ClientVersion},
 		     session_cache = Cache,
 		     session_cache_cb = CacheCb,
 		     ssl_options = SslOpts}) ->
-    case ssl_handshake:hello(Hello, SslOpts, {Port, Session0, Cache, CacheCb,
+    case dtlsex_handshake:hello(Hello, SslOpts, {Port, Session0, Cache, CacheCb,
 				     ConnectionStates0, Cert}, Renegotiation) of
         {Version, {Type, Session}, ConnectionStates, ProtocolsToAdvertise,
 	 EcPointFormats, EllipticCurves} ->
@@ -503,11 +503,11 @@ abbreviated(#finished{verify_data = Data} = Finished,
 		  connection_states = ConnectionStates0} = 
 	    State0) ->
     State = flight_done(State0),
-    case ssl_handshake:verify_connection(Version, Finished, client,
+    case dtlsex_handshake:verify_connection(Version, Finished, client,
 					 get_current_connection_state_prf(ConnectionStates0, write),
 					 MasterSecret, Handshake) of
         verified ->  
-	    ConnectionStates = ssl_record:set_client_verify_data(current_both, Data, ConnectionStates0),
+	    ConnectionStates = dtlsex_record:set_client_verify_data(current_both, Data, ConnectionStates0),
 	    next_state_connection(abbreviated, 
 				  ack_connection(State#state{connection_states = ConnectionStates}));
 	#alert{} = Alert ->
@@ -520,11 +520,11 @@ abbreviated(#finished{verify_data = Data} = Finished,
 		   negotiated_version = Version,
 		   connection_states = ConnectionStates0} = State0) ->
     State = flight_done(State0),
-    case ssl_handshake:verify_connection(Version, Finished, server,
+    case dtlsex_handshake:verify_connection(Version, Finished, server,
 					 get_pending_connection_state_prf(ConnectionStates0, write),
 					 MasterSecret, Handshake0) of
         verified ->
-	    ConnectionStates1 = ssl_record:set_server_verify_data(current_read, Data, ConnectionStates0),
+	    ConnectionStates1 = dtlsex_record:set_server_verify_data(current_read, Data, ConnectionStates0),
 	    State1 =
 		finalize_handshake(State#state{connection_states = ConnectionStates1}, abbreviated, finished),
 	    next_state_connection(abbreviated, ack_connection(State1));
@@ -576,7 +576,7 @@ certify(#certificate{} = Cert,
 	       cert_db = CertDbHandle,
 	       cert_db_ref = CertDbRef,
 	       ssl_options = Opts} = State) ->
-    case ssl_handshake:certify(Cert, CertDbHandle, CertDbRef, Opts#ssl_options.depth,
+    case dtlsex_handshake:certify(Cert, CertDbHandle, CertDbRef, Opts#ssl_options.depth,
 			       Opts#ssl_options.verify,
 			       Opts#ssl_options.verify_fun, Role) of
         {PeerCert, PublicKeyInfo} ->
@@ -669,7 +669,7 @@ certify(#server_hello_done{},
 	       premaster_secret = undefined,
 	       role = client} = State0) ->
     State1 = flight_done(State0),
-    case ssl_handshake:master_secret(Version, Session, 
+    case dtlsex_handshake:master_secret(Version, Session, 
 				     ConnectionStates0, client) of
 	{MasterSecret, ConnectionStates} ->
 	    State = State1#state{connection_states = ConnectionStates},
@@ -686,7 +686,7 @@ certify(#server_hello_done{},
 	       premaster_secret = PremasterSecret,
 	       role = client} = State0) ->    
     State1 = flight_done(State0),
-    case ssl_handshake:master_secret(Version, PremasterSecret, 
+    case dtlsex_handshake:master_secret(Version, PremasterSecret, 
 				     ConnectionStates0, client) of
 	{MasterSecret, ConnectionStates} ->
 	    Session = Session0#session{master_secret = MasterSecret},
@@ -708,7 +708,7 @@ certify(#client_key_exchange{exchange_keys = Keys},
 	State0 = #state{key_algorithm = KeyAlg, negotiated_version = Version}) ->
     State = expect_cipher_state_change(State0),
     try
-	certify_client_key_exchange(ssl_handshake:decode_client_key(Keys, KeyAlg, Version), State)
+	certify_client_key_exchange(dtlsex_handshake:decode_client_key(Keys, KeyAlg, Version), State)
     catch 
 	#alert{} = Alert ->
 	    handle_own_alert(Alert, Version, certify, State)
@@ -726,8 +726,8 @@ certify_client_key_exchange(#encrypted_premaster_secret{premaster_secret= EncPMS
 				   connection_states = ConnectionStates0,
 				   session = Session0,
 				   private_key = Key} = State0) ->
-    PremasterSecret = ssl_handshake:decrypt_premaster_secret(EncPMS, Key),
-    case ssl_handshake:master_secret(Version, PremasterSecret,
+    PremasterSecret = dtlsex_handshake:decrypt_premaster_secret(EncPMS, Key),
+    case dtlsex_handshake:master_secret(Version, PremasterSecret,
 				     ConnectionStates0, server) of
 	{MasterSecret, ConnectionStates} ->
 	    Session = Session0#session{master_secret = MasterSecret},
@@ -806,7 +806,7 @@ certify_client_key_exchange(#client_rsa_psk_identity{
 				   #encrypted_premaster_secret{premaster_secret= EncPMS}},
 			    #state{negotiated_version = Version,
 				   private_key = Key} = State0) ->
-    PremasterSecret = ssl_handshake:decrypt_premaster_secret(EncPMS, Key),
+    PremasterSecret = dtlsex_handshake:decrypt_premaster_secret(EncPMS, Key),
     case server_rsa_psk_master_secret(PskIdentity, PremasterSecret, State0) of
 	#state{} = State1 ->
 	    {Record, State} = next_record(State1),
@@ -849,7 +849,7 @@ cipher(#certificate_verify{signature = Signature, hashsign_algorithm = CertHashS
 		   {_, _} -> CertHashSign;
 		   _      -> ConnectionHashSign
 	       end,
-    case ssl_handshake:certificate_verify(Signature, PublicKeyInfo,
+    case dtlsex_handshake:certificate_verify(Signature, PublicKeyInfo,
 					  Version, HashSign, MasterSecret, Handshake) of
 	valid ->
 	    {Record, State} = next_record(State0),
@@ -873,7 +873,7 @@ cipher(#finished{verify_data = Data} = Finished,
 		  connection_states = ConnectionStates0,
 	      tls_handshake_history = Handshake0} = State0) ->
     State = flight_done(State0),
-    case ssl_handshake:verify_connection(Version, Finished, 
+    case dtlsex_handshake:verify_connection(Version, Finished, 
 					 opposite_role(Role), 
 					 get_current_connection_state_prf(ConnectionStates0, read),
 					 MasterSecret, Handshake0) of
@@ -908,7 +908,7 @@ connection(#hello_request{}, #state{host = Host, port = Port,
 				    connection_states = ConnectionStates0,
 				    renegotiation = {Renegotiation, _},
 				    client_cookie = Cookie} = State0) ->
-    Hello = ssl_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
+    Hello = dtlsex_handshake:client_hello(Host, Port, Cookie, ConnectionStates0, SslOpts,
 				       Cache, CacheCb, Renegotiation, Cert),
 
     State1 = State0#state{session = Session0#session{session_id = Hello#client_hello.session_id}},
@@ -981,7 +981,7 @@ handle_sync_event({start, Timeout}, StartFrom, hello, State) ->
 %% controlling_process has been evalueated before receiving handshake
 %% messages from client. The server should put the socket in passive
 %% mode before telling the client that it is willing to upgrade
-%% and before calling ssl:ssl_accept/2. These clauses are 
+%% and before calling dtlsex:ssl_accept/2. These clauses are 
 %% here to make sure it is the users problem and not owers if
 %% they upgrade an active socket. 
 handle_sync_event({start,_}, _, connection, State) ->
@@ -1101,7 +1101,7 @@ handle_sync_event({prf, Secret, Label, Seed, WantedLength}, _, StateName,
 		  #state{connection_states = ConnectionStates,
 			 negotiated_version = Version} = State) ->
     ConnectionState =
-	ssl_record:current_connection_state(ConnectionStates, read),
+	dtlsex_record:current_connection_state(ConnectionStates, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{master_secret = MasterSecret,
 			 client_random = ClientRandom,
@@ -1116,7 +1116,7 @@ handle_sync_event({prf, Secret, Label, Seed, WantedLength}, _, StateName,
 					     (client_random, Acc) -> [ClientRandom|Acc];
 					     (server_random, Acc) -> [ServerRandom|Acc]
 					  end, [], Seed)),
-		ssl_handshake:prf(Version, SecretToUse, Label, SeedToUse, WantedLength)
+		dtlsex_handshake:prf(Version, SecretToUse, Label, SeedToUse, WantedLength)
 	    catch
 		exit:_ -> {error, badarg};
 		error:Reason -> {error, Reason}
@@ -1127,15 +1127,15 @@ handle_sync_event(info, _, StateName,
 		  #state{negotiated_version = Version,
 			 session = #session{cipher_suite = Suite}} = State) ->
     
-    AtomVersion = ssl_record:protocol_version(Version),
-    {reply, {ok, {AtomVersion, ssl:suite_definition(Suite)}},
+    AtomVersion = dtlsex_record:protocol_version(Version),
+    {reply, {ok, {AtomVersion, dtlsex:suite_definition(Suite)}},
      StateName, State, get_timeout(State)};
 
 handle_sync_event(session_info, _, StateName, 
 		  #state{session = #session{session_id = Id,
 					    cipher_suite = Suite}} = State) ->
     {reply, [{session_id, Id}, 
-	     {cipher_suite, ssl:suite_definition(Suite)}],
+	     {cipher_suite, dtlsex:suite_definition(Suite)}],
      StateName, State, get_timeout(State)};
 
 handle_sync_event(peer_certificate, _, StateName, 
@@ -1206,7 +1206,7 @@ handle_info({timeout, _, dtls_retransmit}, StateName, State0) ->
 
 handle_info({timeout, _, msl_timeout}, StateName,
 	    State0 = #state{connection_states = ConnectionStates0}) ->
-    ConnectionStates = ssl_record:clear_previous_epoch(ConnectionStates0),
+    ConnectionStates = dtlsex_record:clear_previous_epoch(ConnectionStates0),
     {next_state, StateName, State0#state{connection_states = ConnectionStates,
 					 msl_timer = undefined}, get_timeout(State0)};
 
@@ -1251,9 +1251,9 @@ handle_info(Msg, StateName,
 %% Reason. The return value is ignored.
 %%--------------------------------------------------------------------
 terminate(_, _, #state{terminated = true}) ->
-    %% Happens when user closes the connection using ssl:close/1
+    %% Happens when user closes the connection using dtlsex:close/1
     %% we want to guarantee that Transport:close has been called
-    %% when ssl:close/1 returns.
+    %% when dtlsex:close/1 returns.
     ok;
 
 terminate({shutdown, transport_closed}, StateName, #state{send_queue = SendQueue,
@@ -1303,7 +1303,7 @@ start_fsm(Role, Host, Port, Socket, Opts,
 	  User, {CbModule, _,_, _} = CbInfo, 
 	  Timeout) -> 
     try 
-	{ok, Pid} = ssl_connection_sup:start_child([Role, Host, Port, Socket, 
+	{ok, Pid} = dtlsex_connection_sup:start_child([Role, Host, Port, Socket, 
 						    Opts, User, CbInfo]), 
 	{ok, SslSocket} = socket_control(Socket, Pid, CbModule),
 	ok = handshake(SslSocket, Timeout),
@@ -1325,7 +1325,7 @@ ssl_init(SslOpts, Role) ->
     {ok, CertDbRef, CertDbHandle, FileRefHandle, CacheHandle, OwnCert, PrivateKey, DHParams}.
 
 init_manager_name(false) ->
-    put(ssl_manager, ssl_manager).
+    put(dtlsex_manager, dtlsex_manager).
 
 init_certificates(#ssl_options{cacerts = CaCerts,
 			       cacertfile = CACertFile,
@@ -1339,7 +1339,7 @@ init_certificates(#ssl_options{cacerts = CaCerts,
 			_ ->
 			    {der, CaCerts}
 		    end,
-	    {ok, _, _, _, _, _} = ssl_manager:connection_init(Certs, Role)
+	    {ok, _, _, _, _, _} = dtlsex_manager:connection_init(Certs, Role)
 	catch
 	    _:Reason ->
 		file_error(CACertFile, {cacertfile, Reason})
@@ -1353,7 +1353,7 @@ init_certificates(undefined, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHan
     try 
 	%% Ignoring potential proxy-certificates see: 
 	%% http://dev.globus.org/wiki/Security/ProxyFileFormat
-	[OwnCert|_] = ssl_certificate:file_to_certificats(CertFile, PemCacheHandle),
+	[OwnCert|_] = dtlsex_certificate:file_to_certificats(CertFile, PemCacheHandle),
 	{ok, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHandle, CacheHandle, OwnCert}
     catch _Error:_Reason  ->
 	    {ok, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHandle, CacheHandle, undefined}
@@ -1361,7 +1361,7 @@ init_certificates(undefined, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHan
 
 init_certificates(undefined, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHandle, CacheRef, CertFile, server) ->
     try
-	[OwnCert|_] = ssl_certificate:file_to_certificats(CertFile, PemCacheHandle),
+	[OwnCert|_] = dtlsex_certificate:file_to_certificats(CertFile, PemCacheHandle),
 	{ok, CertDbRef, CertDbHandle, FileRefHandle, PemCacheHandle, CacheRef, OwnCert}
     catch
 	_:Reason ->
@@ -1374,7 +1374,7 @@ init_private_key(_, undefined, <<>>, _Password, _Client) ->
     undefined;
 init_private_key(DbHandle, undefined, KeyFile, Password, _) ->
     try
-	{ok, List} = ssl_manager:cache_pem_file(KeyFile, DbHandle),
+	{ok, List} = dtlsex_manager:cache_pem_file(KeyFile, DbHandle),
 	[PemEntry] = [PemEntry || PemEntry = {PKey, _ , _} <- List,
 				  PKey =:= 'RSAPrivateKey' orelse
 				      PKey =:= 'DSAPrivateKey' orelse
@@ -1430,7 +1430,7 @@ init_diffie_hellman(_,_,undefined, _) ->
     ?DEFAULT_DIFFIE_HELLMAN_PARAMS;
 init_diffie_hellman(DbHandle,_, DHParamFile, server) ->
     try
-	{ok, List} = ssl_manager:cache_pem_file(DHParamFile,DbHandle),
+	{ok, List} = dtlsex_manager:cache_pem_file(DHParamFile,DbHandle),
 	case [Entry || Entry = {'DHParameter', _ , _} <- List] of
 	    [Entry] ->
 		public_key:pem_entry_decode(Entry);
@@ -1476,7 +1476,7 @@ certify_client(#state{client_certificate_requested = true, role = client,
 		      cert_db = CertDbHandle,
                       cert_db_ref = CertDbRef,
 		      session = #session{own_certificate = OwnCert}} = State) ->
-    Certificate = ssl_handshake:certificate(OwnCert, CertDbHandle, CertDbRef, client),
+    Certificate = dtlsex_handshake:certificate(OwnCert, CertDbHandle, CertDbRef, client),
     buffer_flight(Certificate, State);
 
 certify_client(#state{client_certificate_requested = false} = State) ->
@@ -1491,7 +1491,7 @@ verify_client_cert(#state{client_certificate_requested = true, role = client,
 			  tls_handshake_history = Handshake0} = State) ->
 
     %%TODO: for TLS 1.2 we can choose a different/stronger HashSign combination for this.
-    case ssl_handshake:client_certificate_verify(OwnCert, MasterSecret, 
+    case dtlsex_handshake:client_certificate_verify(OwnCert, MasterSecret, 
 						 Version, HashSign, PrivateKey, Handshake0) of
         #certificate_verify{} = Verified ->
 	    buffer_flight(Verified, State);
@@ -1512,7 +1512,7 @@ do_server_hello(Type, NextProtocolsToSend,
 		= State0) when is_atom(Type) ->
 
     ServerHello = 
-        ssl_handshake:server_hello(SessId, Version, 
+        dtlsex_handshake:server_hello(SessId, Version, 
                                    ConnectionStates0, Renegotiation,
 				   NextProtocolsToSend, EcPointFormats, EllipticCurves),
     State = server_hello(ServerHello,
@@ -1548,7 +1548,7 @@ resumed_server_hello(#state{session = Session,
 			    connection_states = ConnectionStates0,
 			    negotiated_version = Version} = State0) ->
 
-    case ssl_handshake:master_secret(Version, Session,
+    case dtlsex_handshake:master_secret(Version, Session,
 				     ConnectionStates0, server) of
 	{_, ConnectionStates1} ->
 	    State1 = State0#state{connection_states = ConnectionStates1,
@@ -1574,7 +1574,7 @@ handle_resumed_session(SessId, #state{connection_states = ConnectionStates0,
 				      session_cache = Cache,
 				      session_cache_cb = CacheCb} = State0) ->
     Session = CacheCb:lookup(Cache, {{Host, Port}, SessId}),
-    case ssl_handshake:master_secret(Version, Session, 
+    case dtlsex_handshake:master_secret(Version, Session, 
 				     ConnectionStates0, client) of
 	{_, ConnectionStates} ->
 	    State1 = expect_cipher_state_change(State0),
@@ -1616,14 +1616,14 @@ server_certify_and_key_exchange(State0) ->
     
 server_hello(ServerHello, #state{negotiated_version = Version} = State) ->
     CipherSuite = ServerHello#server_hello.cipher_suite,
-    {KeyAlgorithm, _, _, _} = ssl_cipher:suite_definition(CipherSuite),
+    {KeyAlgorithm, _, _, _} = dtlsex_cipher:suite_definition(CipherSuite),
 
     State1 = buffer_flight(ServerHello, State),
     State1#state{key_algorithm = KeyAlgorithm,
 		 hashsign_algorithm = default_hashsign(Version, KeyAlgorithm)}.
 
 server_hello_done(#state{} = State) ->
-    HelloDone = ssl_handshake:server_hello_done(),
+    HelloDone = dtlsex_handshake:server_hello_done(),
     send_flight(HelloDone, waiting, State).
 
 certify_server(#state{key_algorithm = Algo} = State)
@@ -1635,7 +1635,7 @@ certify_server(#state{key_algorithm = Algo} = State)
 certify_server(#state{cert_db = CertDbHandle,
 		      cert_db_ref = CertDbRef,
 		      session = #session{own_certificate = OwnCert}} = State) ->
-    case ssl_handshake:certificate(OwnCert, CertDbHandle, CertDbRef, server) of
+    case dtlsex_handshake:certificate(OwnCert, CertDbHandle, CertDbRef, server) of
 	CertMsg = #certificate{} ->
 	    buffer_flight(CertMsg, State);
 	Alert = #alert{} ->
@@ -1656,11 +1656,11 @@ key_exchange(#state{role = server, key_algorithm = Algo,
        Algo == dh_anon ->
     DHKeys = public_key:generate_key(Params),
     ConnectionState = 
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams, 
-    Msg =  ssl_handshake:key_exchange(server, Version, {dh, DHKeys, Params,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {dh, DHKeys, Params,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1681,11 +1681,11 @@ key_exchange(#state{role = server, key_algorithm = Algo,
 
     ECDHKeys = public_key:generate_key(select_curve(State)),
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {ecdh, ECDHKeys,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {ecdh, ECDHKeys,
 							HashSignAlgo, ClientRandom,
 							ServerRandom,
 							PrivateKey}),
@@ -1703,11 +1703,11 @@ key_exchange(#state{role = server, key_algorithm = psk,
 		    negotiated_version = Version
 		   } = State) ->
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {psk, PskIdentityHint,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {psk, PskIdentityHint,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1722,11 +1722,11 @@ key_exchange(#state{role = server, key_algorithm = ecdhe_psk,
 		   } = State) ->
     ECDHKeys = public_key:generate_key(select_curve(State)),
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {ecdhe_psk, PskIdentityHint, ECDHKeys,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {ecdhe_psk, PskIdentityHint, ECDHKeys,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1743,11 +1743,11 @@ key_exchange(#state{role = server, key_algorithm = dhe_psk,
 		   } = State) ->
     DHKeys = public_key:generate_key(Params),
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {dhe_psk, PskIdentityHint, DHKeys, Params,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {dhe_psk, PskIdentityHint, DHKeys, Params,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1765,11 +1765,11 @@ key_exchange(#state{role = server, key_algorithm = rsa_psk,
 		    negotiated_version = Version
 		   } = State) ->
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {psk, PskIdentityHint,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {psk, PskIdentityHint,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1794,11 +1794,11 @@ key_exchange(#state{role = server, key_algorithm = Algo,
 		   Keys0
 	   end,
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:pending_connection_state(ConnectionStates0, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams,
-    Msg =  ssl_handshake:key_exchange(server, Version, {srp, Keys, SrpParams,
+    Msg =  dtlsex_handshake:key_exchange(server, Version, {srp, Keys, SrpParams,
 					       HashSignAlgo, ClientRandom,
 					       ServerRandom,
 					       PrivateKey}),
@@ -1821,7 +1821,7 @@ key_exchange(#state{role = client,
   when Algorithm == dhe_dss;
        Algorithm == dhe_rsa;
        Algorithm == dh_anon ->
-    Msg =  ssl_handshake:key_exchange(client, Version, {dh, DhPubKey}),
+    Msg =  dtlsex_handshake:key_exchange(client, Version, {dh, DhPubKey}),
     buffer_flight(Msg, State);
 
 key_exchange(#state{role = client,
@@ -1831,14 +1831,14 @@ key_exchange(#state{role = client,
   when Algorithm == ecdhe_ecdsa; Algorithm == ecdhe_rsa;
        Algorithm == ecdh_ecdsa; Algorithm == ecdh_rsa;
        Algorithm == ecdh_anon ->
-    Msg = ssl_handshake:key_exchange(client, Version, {ecdh, Keys}),
+    Msg = dtlsex_handshake:key_exchange(client, Version, {ecdh, Keys}),
     buffer_flight(Msg, State);
 
 key_exchange(#state{role = client,
 		    ssl_options = SslOpts,
 		    key_algorithm = psk,
 		    negotiated_version = Version} = State) ->
-    Msg =  ssl_handshake:key_exchange(client, Version, {psk, SslOpts#ssl_options.psk_identity}),
+    Msg =  dtlsex_handshake:key_exchange(client, Version, {psk, SslOpts#ssl_options.psk_identity}),
     buffer_flight(Msg, State);
 
 key_exchange(#state{role = client,
@@ -1846,7 +1846,7 @@ key_exchange(#state{role = client,
 		    key_algorithm = ecdhe_psk,
 		    negotiated_version = Version,
 		    diffie_hellman_keys = Keys} = State) ->
-    Msg =  ssl_handshake:key_exchange(client, Version, {ecdhe_psk, SslOpts#ssl_options.psk_identity, Keys}),
+    Msg =  dtlsex_handshake:key_exchange(client, Version, {ecdhe_psk, SslOpts#ssl_options.psk_identity, Keys}),
     buffer_flight(Msg, State);
 
 key_exchange(#state{role = client,
@@ -1854,7 +1854,7 @@ key_exchange(#state{role = client,
 		    key_algorithm = dhe_psk,
 		    negotiated_version = Version,
 		    diffie_hellman_keys = {DhPubKey, _}} = State) ->
-    Msg =  ssl_handshake:key_exchange(client, Version, {dhe_psk, SslOpts#ssl_options.psk_identity, DhPubKey}),
+    Msg =  dtlsex_handshake:key_exchange(client, Version, {dhe_psk, SslOpts#ssl_options.psk_identity, DhPubKey}),
     buffer_flight(Msg, State);
 
 key_exchange(#state{role = client,
@@ -1873,7 +1873,7 @@ key_exchange(#state{role = client,
   when Algorithm == srp_dss;
        Algorithm == srp_rsa;
        Algorithm == srp_anon ->
-    Msg =  ssl_handshake:key_exchange(client, Version, {srp, ClientPubKey}),
+    Msg =  dtlsex_handshake:key_exchange(client, Version, {srp, ClientPubKey}),
     buffer_flight(Msg, State).
 
 rsa_key_exchange(Version, PremasterSecret, PublicKeyInfo = {Algorithm, _, _})
@@ -1886,7 +1886,7 @@ rsa_key_exchange(Version, PremasterSecret, PublicKeyInfo = {Algorithm, _, _})
        Algorithm == ?sha384WithRSAEncryption;
        Algorithm == ?sha512WithRSAEncryption
        ->
-    ssl_handshake:key_exchange(client, Version,
+    dtlsex_handshake:key_exchange(client, Version,
 			       {premaster_secret, PremasterSecret,
 				PublicKeyInfo});
 rsa_key_exchange(_, _, _) ->
@@ -1902,7 +1902,7 @@ rsa_psk_key_exchange(Version, PskIdentity, PremasterSecret, PublicKeyInfo = {Alg
        Algorithm == ?sha384WithRSAEncryption;
        Algorithm == ?sha512WithRSAEncryption
        ->
-    ssl_handshake:key_exchange(client, Version,
+    dtlsex_handshake:key_exchange(client, Version,
 			       {psk_premaster_secret, PskIdentity, PremasterSecret,
 				PublicKeyInfo});
 rsa_psk_key_exchange(_, _, _, _) ->
@@ -1918,7 +1918,7 @@ request_client_cert(#state{ssl_options = #ssl_options{verify = verify_peer},
 			   connection_states = ConnectionStates0,
 			   cert_db = CertDbHandle,
 			   cert_db_ref = CertDbRef} = State) ->
-    Msg = ssl_handshake:certificate_request(ConnectionStates0, CertDbHandle, CertDbRef),
+    Msg = dtlsex_handshake:certificate_request(ConnectionStates0, CertDbHandle, CertDbRef),
     State1 = buffer_flight(Msg, State),
     State1#state{client_certificate_requested = true};
 
@@ -1939,12 +1939,12 @@ next_protocol(#state{next_protocol = undefined} = State) ->
 next_protocol(#state{expecting_next_protocol_negotiation = false} = State) ->
     State;
 next_protocol(#state{next_protocol = NextProtocol} = State) ->
-    NextProtocolMessage = ssl_handshake:next_protocol(NextProtocol),
+    NextProtocolMessage = dtlsex_handshake:next_protocol(NextProtocol),
     buffer_flight(NextProtocolMessage, State).
 
 cipher_protocol_change(#state{connection_states = ConnectionStates0} = State) ->
     ConnectionStates =
-	ssl_record:activate_pending_connection_state(ConnectionStates0, write),
+	dtlsex_record:activate_pending_connection_state(ConnectionStates0, write),
     State#state{connection_states = ConnectionStates}.
 
 finished(OriginState,
@@ -1953,7 +1953,7 @@ finished(OriginState,
                 connection_states = ConnectionStates0,
                 tls_handshake_history = Handshake0} = State, StateName, FlightState) ->
     MasterSecret = Session#session.master_secret,
-    Finished = ssl_handshake:finished(Version, Role,
+    Finished = dtlsex_handshake:finished(Version, Role,
 				       get_current_connection_state_prf(ConnectionStates0, write),
 				       MasterSecret, Handshake0),
     ConnectionStates1 = save_verify_data(Role, Finished, ConnectionStates0, StateName),
@@ -1977,18 +1977,18 @@ finished(OriginState,
 		      connection_states = ConnectionStates}.
 
 save_verify_data(client, #finished{verify_data = Data}, ConnectionStates, certify) ->
-    ssl_record:set_client_verify_data(current_write, Data, ConnectionStates);
+    dtlsex_record:set_client_verify_data(current_write, Data, ConnectionStates);
 save_verify_data(server, #finished{verify_data = Data}, ConnectionStates, cipher) ->
-    ssl_record:set_server_verify_data(current_both, Data, ConnectionStates);
+    dtlsex_record:set_server_verify_data(current_both, Data, ConnectionStates);
 save_verify_data(client, #finished{verify_data = Data}, ConnectionStates, abbreviated) ->
-    ssl_record:set_client_verify_data(current_both, Data, ConnectionStates);
+    dtlsex_record:set_client_verify_data(current_both, Data, ConnectionStates);
 save_verify_data(server, #finished{verify_data = Data}, ConnectionStates, abbreviated) ->
-    ssl_record:set_server_verify_data(current_write, Data, ConnectionStates).
+    dtlsex_record:set_server_verify_data(current_write, Data, ConnectionStates).
 
 handle_server_key(#server_key_exchange{exchange_keys = Keys},
 		  #state{key_algorithm = KeyAlg,
 			 negotiated_version = Version} = State) ->
-    Params = ssl_handshake:decode_server_key(Keys, KeyAlg, Version),
+    Params = dtlsex_handshake:decode_server_key(Keys, KeyAlg, Version),
     HashSign = connection_hashsign(Params#server_key_params.hashsign, State),
     case HashSign of
 	{_, SignAlgo} when SignAlgo == anon; SignAlgo == ecdh_anon ->
@@ -2005,15 +2005,15 @@ verify_server_key(#server_key_params{params = Params,
 			 public_key_info = PubKeyInfo,
 			 connection_states = ConnectionStates} = State) ->
     ConnectionState =
-	ssl_record:pending_connection_state(ConnectionStates, read),
+	dtlsex_record:pending_connection_state(ConnectionStates, read),
     SecParams = ConnectionState#connection_state.security_parameters,
     #security_parameters{client_random = ClientRandom,
 			 server_random = ServerRandom} = SecParams, 
-    Hash = ssl_handshake:server_key_exchange_hash(HashAlgo,
+    Hash = dtlsex_handshake:server_key_exchange_hash(HashAlgo,
 						  <<ClientRandom/binary,
 						    ServerRandom/binary,
 						    EncParams/binary>>),
-    case ssl_handshake:verify_signature(Version, Hash, HashSign, Signature, PubKeyInfo) of
+    case dtlsex_handshake:verify_signature(Version, Hash, HashSign, Signature, PubKeyInfo) of
 	true ->
 	    server_master_secret(Params, State);
 	false ->
@@ -2056,7 +2056,7 @@ master_from_premaster_secret(PremasterSecret,
 			     #state{session = Session,
 				    negotiated_version = Version, role = Role,
 				    connection_states = ConnectionStates0} = State) ->
-    case ssl_handshake:master_secret(Version, PremasterSecret,
+    case dtlsex_handshake:master_secret(Version, PremasterSecret,
 				     ConnectionStates0, Role) of
 	{MasterSecret, ConnectionStates} ->
 	    State#state{
@@ -2184,7 +2184,7 @@ handle_srp_identity(Username, {Fun, UserState}) ->
     case Fun(srp, Username, UserState) of
 	{ok, {SRPParams, Salt, DerivedKey}}
 	  when is_atom(SRPParams), is_binary(Salt), is_binary(DerivedKey) ->
-	    {Generator, Prime} = ssl_srp_primes:get_srp_params(SRPParams),
+	    {Generator, Prime} = dtlsex_srp_primes:get_srp_params(SRPParams),
 	    Verifier = crypto:mod_pow(Generator, DerivedKey, Prime),
 	    #srp_user{generator = Generator, prime = Prime,
 		      salt = Salt, verifier = Verifier};
@@ -2210,7 +2210,7 @@ client_srp_master_secret(Generator, Prime, Salt, ServerPub, undefined, State) ->
 
 client_srp_master_secret(Generator, Prime, Salt, ServerPub, ClientKeys,
 			 #state{ssl_options = SslOpts} = State) ->
-    case ssl_srp_primes:check_srp_params(Generator, Prime) of
+    case dtlsex_srp_primes:check_srp_params(Generator, Prime) of
 	ok ->
 	    {Username, Password} = SslOpts#ssl_options.srp_identity,
 	    DerivedKey = crypto:hash(sha, [Salt, crypto:hash(sha, [Username, <<$:>>, Password])]),
@@ -2225,20 +2225,20 @@ client_srp_master_secret(Generator, Prime, Salt, ServerPub, ClientKeys,
     end.
 
 cipher_role(client, Data, Session, #state{connection_states = ConnectionStates0} = State0) ->
-    ConnectionStates = ssl_record:set_server_verify_data(current_both, Data, ConnectionStates0),
+    ConnectionStates = dtlsex_record:set_server_verify_data(current_both, Data, ConnectionStates0),
     State = flight_done(State0),
     next_state_connection(cipher, ack_connection(State#state{session = Session,
 							     connection_states = ConnectionStates}));
      
 cipher_role(server, Data, Session,  #state{connection_states = ConnectionStates0} = State) -> 
-    ConnectionStates1 = ssl_record:set_client_verify_data(current_read, Data, ConnectionStates0),
+    ConnectionStates1 = dtlsex_record:set_client_verify_data(current_read, Data, ConnectionStates0),
     State1 =
 	finalize_handshake(State#state{connection_states = ConnectionStates1,
 				       session = Session}, cipher, finished),
     next_state_connection(cipher, ack_connection(State1)).
 
 encode_alert(#alert{} = Alert, Version, ConnectionStates) ->
-    {BinMsg, Cs1} = ssl_record:encode_alert_record(Alert, Version, ConnectionStates),
+    {BinMsg, Cs1} = dtlsex_record:encode_alert_record(Alert, Version, ConnectionStates),
     {[BinMsg], Cs1}.
 
 encode_packet(Data, #socket_options{packet=Packet}) ->
@@ -2333,7 +2333,7 @@ write_application_data(Data0, From, #state{socket = Socket,
 	    renegotiate(State#state{send_queue = queue:in_r({From, Data}, SendQueue),
 				    renegotiation = {true, internal}});
 	false ->
-	    {Msgs, ConnectionStates} = ssl_record:encode_data(Data, Version, ConnectionStates0),
+	    {Msgs, ConnectionStates} = dtlsex_record:encode_data(Data, Version, ConnectionStates0),
 	    Result = Transport:send(Socket, Msgs),
 	    {reply, Result,
 	     connection, State#state{connection_states = ConnectionStates}, get_timeout(State)}
@@ -2423,7 +2423,7 @@ format_reply(_, _,#socket_options{active = false, mode = Mode, packet = Packet,
     {ok, do_format_reply(Mode, Packet, Header, Data)};
 format_reply(Transport, Socket, #socket_options{active = _, mode = Mode, packet = Packet,
 						header = Header}, Data) ->
-    {ssl, ssl_socket:socket(self(), Transport, Socket), do_format_reply(Mode, Packet, Header, Data)}.
+    {ssl, dtlsex_socket:socket(self(), Transport, Socket), do_format_reply(Mode, Packet, Header, Data)}.
 
 deliver_packet_error(Transport, Socket, SO= #socket_options{active = Active}, Data, Pid, From) ->
     send_or_reply(Active, Pid, From, format_packet_error(Transport, Socket, SO, Data)).
@@ -2431,7 +2431,7 @@ deliver_packet_error(Transport, Socket, SO= #socket_options{active = Active}, Da
 format_packet_error(_, _,#socket_options{active = false, mode = Mode}, Data) ->
     {error, {invalid_packet, do_format_reply(Mode, raw, 0, Data)}};
 format_packet_error(Transport, Socket, #socket_options{active = _, mode = Mode}, Data) ->
-    {ssl_error, ssl_socket:socket(self(), Transport, Socket), {invalid_packet, do_format_reply(Mode, raw, 0, Data)}}.
+    {ssl_error, dtlsex_socket:socket(self(), Transport, Socket), {invalid_packet, do_format_reply(Mode, raw, 0, Data)}}.
 
 do_format_reply(binary, _, N, Data) when N > 0 ->  % Header mode
     header(N, Data);
@@ -2520,7 +2520,7 @@ next_state(Current, Next, #ssl_tls{type = ?HANDSHAKE} = Record,
    	fun({#hello_request{} = Packet, _}, {next_state, connection = SName, State}) ->
    		%% This message should not be included in handshake
    		%% message hashes. Starts new handshake (renegotiation)
-		Hs0 = ssl_handshake:init_handshake_history(),
+		Hs0 = dtlsex_handshake:init_handshake_history(),
 		State1 = start_flight(1, State#state{tls_handshake_history=Hs0,
 						     renegotiation = {true, peer}}),
 		?MODULE:SName(Packet, State1);
@@ -2530,12 +2530,12 @@ next_state(Current, Next, #ssl_tls{type = ?HANDSHAKE} = Record,
    		?MODULE:SName(Packet, State);
 	   ({#client_hello{} = Packet, Raw}, {next_state, connection = SName, State}) ->
 		Version = Packet#client_hello.client_version,
-		Hs0 = ssl_handshake:init_handshake_history(),
-		Hs1 = ssl_handshake:update_handshake_history(Hs0, Raw),
+		Hs0 = dtlsex_handshake:init_handshake_history(),
+		Hs1 = dtlsex_handshake:update_handshake_history(Hs0, Raw),
 		?MODULE:SName(Packet, State#state{tls_handshake_history=Hs1,
    						  renegotiation = {true, peer}});
 	   ({Packet, Raw}, {next_state, SName, State = #state{tls_handshake_history=Hs0}}) ->
-		Hs1 = ssl_handshake:update_handshake_history(Hs0, Raw),
+		Hs1 = dtlsex_handshake:update_handshake_history(Hs0, Raw),
 		?MODULE:SName(Packet, State#state{tls_handshake_history=Hs1});
    	   (_, StopState) -> StopState
    	end,
@@ -2565,10 +2565,10 @@ next_state(Current, Next, #ssl_tls{version = {254, _}, epoch = Epoch,
 		 tls_cipher_texts_next = CipherTextsNext,
 		 dtls_handshake_buffer = HsState} = State0) ->
 
-    case ssl_record:current_connection_state_epoch(ConnectionStates0, read) of
+    case dtlsex_record:current_connection_state_epoch(ConnectionStates0, read) of
 	Epoch ->
 	    ConnectionStates1 =
-		ssl_record:activate_pending_connection_state(ConnectionStates0, read),
+		dtlsex_record:activate_pending_connection_state(ConnectionStates0, read),
 	    State1 = start_msl_timeout(State0),
 	    {Record, State} = next_record(State1#state{
 					    change_cipher_spec = {false, false},
@@ -2577,7 +2577,7 @@ next_state(Current, Next, #ssl_tls{version = {254, _}, epoch = Epoch,
 %% This copies in record that we might not want.....
 					    tls_cipher_texts = CipherTexts ++ CipherTextsNext,
 					    tls_cipher_texts_next = [],
-					    dtls_handshake_buffer = ssl_handshake:dtls_handshake_new_epoch(HsState)});
+					    dtls_handshake_buffer = dtlsex_handshake:dtls_handshake_new_epoch(HsState)});
 	_ ->
 	    %% this is a retransmit, stay where we are
 	    {Record, State} = next_record(State0)
@@ -2589,7 +2589,7 @@ next_state(Current, Next, #ssl_tls{version = {254, _}, epoch = Epoch,
 	       ChangeCipher, State0 = #state{change_cipher_spec = Ccs,
 					     connection_states = ConnectionStates0}) ->
 
-    case ssl_record:current_connection_state_epoch(ConnectionStates0, read) of
+    case dtlsex_record:current_connection_state_epoch(ConnectionStates0, read) of
 	Epoch ->
 	    {Record, State} = next_record(State0#state{change_cipher_spec = setelement(2, Ccs, ChangeCipher)}),
 	    next_state(Current, Next, Record, State);
@@ -2605,7 +2605,7 @@ next_state(Current, Next, #ssl_tls{type = ?CHANGE_CIPHER_SPEC, fragment = <<1>>}
           #state{connection_states = ConnectionStates0} = State0) ->
 
     ConnectionStates1 =
-	ssl_record:activate_pending_connection_state(ConnectionStates0, read),
+	dtlsex_record:activate_pending_connection_state(ConnectionStates0, read),
     State1 = start_msl_timeout(State0),
     {Record, State} = next_record(State1#state{
 				    connection_states = ConnectionStates1, last_read_seq = 0}),
@@ -2617,7 +2617,7 @@ next_state(Current, Next, #ssl_tls{type = _Unknown}, State0) ->
 
 next_tls_record(Data, #state{tls_record_buffer = Buf0,
 		       tls_cipher_texts = CT0} = State0) ->
-    case ssl_record:get_tls_records(Data, Buf0) of
+    case dtlsex_record:get_tls_records(Data, Buf0) of
 	{Records, Buf1} ->
 	    CT1 = CT0 ++ Records,
 	    next_record(State0#state{tls_record_buffer = Buf1,
@@ -2632,12 +2632,12 @@ next_record(#state{tls_packets = [], tls_cipher_texts = [],
 
 next_record(#state{tls_packets = [], tls_cipher_texts = [],
 		   socket = Socket, transport_cb = Transport} = State) ->
-    ssl_socket:setopts(Transport, Socket, [{active,once}]),
+    dtlsex_socket:setopts(Transport, Socket, [{active,once}]),
     {no_record, State};
 next_record(#state{tls_packets = [], tls_cipher_texts = [CT | Rest],
                    connection_states = ConnStates} = State) ->
     #connection_states{min_read_epoch = MinReadEpoch} = ConnStates,
-    #connection_state{epoch = CurrEpoch} = ssl_record:current_connection_state(ConnStates, read),
+    #connection_state{epoch = CurrEpoch} = dtlsex_record:current_connection_state(ConnStates, read),
     next_record(CT, MinReadEpoch, CurrEpoch, State#state{tls_cipher_texts = Rest});
 
 next_record(State) ->
@@ -2677,10 +2677,10 @@ next_record(#ssl_tls{type = Type, version = {254, _}, epoch = CTEpoch, sequence 
     %% handshake record from the previous epoch,
     %% trigger resend if the seq is greater than the last decoded seq...
 
-    case ssl_record:connection_state_by_epoch(ConnStates0, CTEpoch, read) of
+    case dtlsex_record:connection_state_by_epoch(ConnStates0, CTEpoch, read) of
 	#connection_state{sequence_number = PrevSeqNo}
 	  when PrevSeqNo < SeqNo ->
-	    case ssl_record:decode_cipher_text(CT, ConnStates0) of
+	    case dtlsex_record:decode_cipher_text(CT, ConnStates0) of
 		{_, ConnStates} ->
 		    %% TODO (maybe / recheck): TRIGGER resend
 		    next_record(State#state{connection_states = ConnStates});
@@ -2699,7 +2699,7 @@ next_record(#ssl_tls{version = {254, _}} = CT,
 
 next_record(#ssl_tls{} = CT, _MinReadEpoch, _CurrentReadEpoch,
 	    #state{connection_states = ConnStates0} = State) ->
-    case ssl_record:decode_cipher_text(CT, ConnStates0) of
+    case dtlsex_record:decode_cipher_text(CT, ConnStates0) of
 	{Plain, ConnStates} ->
 	    {Plain, State#state{connection_states = ConnStates}};
 	#alert{} = Alert ->
@@ -2707,7 +2707,7 @@ next_record(#ssl_tls{} = CT, _MinReadEpoch, _CurrentReadEpoch,
     end.
 
 decode_cipher_text_dtls(CT, #state{connection_states = ConnStates0} = State) ->
-    case ssl_record:decode_cipher_text(CT, ConnStates0) of
+    case dtlsex_record:decode_cipher_text(CT, ConnStates0) of
 	{Plain, ConnStates} ->
 	    {Plain, State#state{connection_states = ConnStates}};
 	#alert{} ->
@@ -2725,7 +2725,7 @@ next_state_connection(StateName, #state{send_queue = Queue0,
     case queue:out(Queue0) of
 	{{value, {From, Data}}, Queue} ->
 	    {Msgs, ConnectionStates} = 
-		ssl_record:encode_data(Data, Version, ConnectionStates0),
+		dtlsex_record:encode_data(Data, Version, ConnectionStates0),
 	    Result = Transport:send(Socket, Msgs),
 	    gen_fsm:reply(From, Result),
 	    next_state_connection(StateName,
@@ -2744,34 +2744,34 @@ next_state_is_connection(_, State =
 			     #socket_options{active = false}}) when RecvFrom =/= undefined ->
     passive_receive(State#state{premaster_secret = undefined,
 				public_key_info = undefined,
-				tls_handshake_history = ssl_handshake:init_handshake_history()}, connection);
+				tls_handshake_history = dtlsex_handshake:init_handshake_history()}, connection);
 
 next_state_is_connection(StateName, State0) ->
     {Record, State} = next_record_if_active(State0),
     next_state(StateName, connection, Record, State#state{premaster_secret = undefined,
 							  public_key_info = undefined,
-							  tls_handshake_history = ssl_handshake:init_handshake_history()}).
+							  tls_handshake_history = dtlsex_handshake:init_handshake_history()}).
 
 register_session(client, Host, Port, #session{is_resumable = new} = Session0) ->
     Session = Session0#session{is_resumable = true},
-    ssl_manager:register_session(Host, Port, Session),
+    dtlsex_manager:register_session(Host, Port, Session),
     Session;
 register_session(server, _, Port, #session{is_resumable = new} = Session0) ->
     Session = Session0#session{is_resumable = true},
-    ssl_manager:register_session(Port, Session),
+    dtlsex_manager:register_session(Port, Session),
     Session;
 register_session(_, _, _, Session) ->
     Session. %% Already registered
 
 invalidate_session(client, Host, Port, Session) ->
-    ssl_manager:invalidate_session(Host, Port, Session);
+    dtlsex_manager:invalidate_session(Host, Port, Session);
 invalidate_session(server, _, Port, Session) ->
-    ssl_manager:invalidate_session(Port, Session).
+    dtlsex_manager:invalidate_session(Port, Session).
 
 initial_state(Role, Host, Port, Socket, {SSLOptions, SocketOptions}, User,
 	      CbInfo = {CbModule, DataTag, CloseTag, ErrorTag}) ->
     ConnType = connection_type(CbInfo, Socket),
-    ConnectionStates = ssl_record:init_connection_states(Role, ConnType),
+    ConnectionStates = dtlsex_record:init_connection_states(Role, ConnType),
     
     SessionCacheCb = case application:get_env(ssl, session_cb) of
 			 {ok, Cb} when is_atom(Cb) ->
@@ -2832,7 +2832,7 @@ get_socket_opts(Transport, Socket, [active | Tags], SockOpts, Acc) ->
     get_socket_opts(Transport, Socket, Tags, SockOpts, 
 		    [{active, SockOpts#socket_options.active} | Acc]);
 get_socket_opts(Transport, Socket, [Tag | Tags], SockOpts, Acc) ->
-    try ssl_socket:getopts(Transport, Socket, [Tag]) of
+    try dtlsex_socket:getopts(Transport, Socket, [Tag]) of
 	{ok, [Opt]} ->
 	    get_socket_opts(Transport, Socket, Tags, SockOpts, [Opt | Acc]);
 	{error, Error} ->
@@ -2848,7 +2848,7 @@ set_socket_opts(_,_, [], SockOpts, []) ->
     {ok, SockOpts};
 set_socket_opts(Transport, Socket, [], SockOpts, Other) ->
     %% Set non emulated options 
-    try ssl_socket:setopts(Transport, Socket, Other) of
+    try dtlsex_socket:setopts(Transport, Socket, Other) of
 	ok ->
 	    {ok, SockOpts};
 	{error, InetError} ->
@@ -2952,20 +2952,20 @@ alert_user(_,_, false = Active, Pid, From,  Alert, Role) ->
     %% If there is an outstanding ssl_accept | recv
     %% From will be defined and send_or_reply will
     %% send the appropriate error message.
-    ReasonCode = ssl_alert:reason_code(Alert, Role),
+    ReasonCode = dtlsex_alert:reason_code(Alert, Role),
     send_or_reply(Active, Pid, From, {error, ReasonCode});
 alert_user(Transport, Socket, Active, Pid, From, Alert, Role) ->
-    case ssl_alert:reason_code(Alert, Role) of
+    case dtlsex_alert:reason_code(Alert, Role) of
 	closed ->
 	    send_or_reply(Active, Pid, From,
-			  {ssl_closed, ssl_socket:socket(self(), Transport, Socket)});
+			  {ssl_closed, dtlsex_socket:socket(self(), Transport, Socket)});
 	ReasonCode ->
 	    send_or_reply(Active, Pid, From,
-			  {ssl_error, ssl_socket:socket(self(), Transport, Socket), ReasonCode})
+			  {ssl_error, dtlsex_socket:socket(self(), Transport, Socket), ReasonCode})
     end.
 
 log_alert(true, Info, Alert) ->
-    Txt = ssl_alert:alert_txt(Alert),
+    Txt = dtlsex_alert:alert_txt(Alert),
     error_logger:format("SSL: ~p: ~s\n", [Info, Txt]);
 log_alert(false, _, _) ->
     ok.
@@ -3012,7 +3012,7 @@ handle_unexpected_message(Msg, Info, #state{negotiated_version = Version} = Stat
     handle_own_alert(Alert, Version, {Info, Msg}, State).
 
 make_premaster_secret({MajVer, MinVer}, rsa) ->
-    Rand = ssl:random_bytes(?NUM_OF_PREMASTERSECRET_BYTES-2),
+    Rand = dtlsex:random_bytes(?NUM_OF_PREMASTERSECRET_BYTES-2),
     <<?BYTE(MajVer), ?BYTE(MinVer), Rand/binary>>;
 make_premaster_secret(_, _) ->
     undefined.
@@ -3037,12 +3037,12 @@ ack_connection(State) ->
 renegotiate(#state{role = client} = State0) ->
     %% Handle same way as if server requested
     %% the renegotiation
-    Hs0 = ssl_handshake:init_handshake_history(),
+    Hs0 = dtlsex_handshake:init_handshake_history(),
     State = start_flight(0, State0#state{tls_handshake_history = Hs0}),
     connection(#hello_request{}, State);
 renegotiate(#state{role = server} = State0) ->
-    Hs0 = ssl_handshake:init_handshake_history(),
-    HelloRequest = ssl_handshake:hello_request(),
+    Hs0 = dtlsex_handshake:init_handshake_history(),
+    HelloRequest = dtlsex_handshake:hello_request(),
     State1 = start_flight(0, State0),
     State2 = send_flight(HelloRequest, waiting, State1),
     {Record, State} = next_record(State2#state{tls_handshake_history = Hs0}),
@@ -3078,7 +3078,7 @@ workaround_transport_delivery_problems(Socket, gen_tcp = Transport) ->
     %% data sent to the tcp port is really delivered to the
     %% peer application before tcp port is closed so that the peer will
     %% get the correct TLS alert message and not only a transport close.
-    ssl_socket:setopts(Transport, Socket, [{active, false}]),
+    dtlsex_socket:setopts(Transport, Socket, [{active, false}]),
     Transport:shutdown(Socket, write),
     %% Will return when other side has closed or after 30 s
     %% e.g. we do not want to hang if something goes wrong
@@ -3101,16 +3101,16 @@ handle_trusted_certs_db(#state{cert_db_ref = Ref,
 			       ssl_options = #ssl_options{cacertfile = undefined}}) ->
     %% Certs provided as DER directly can not be shared
     %% with other connections and it is safe to delete them when the connection ends.
-    ssl_certificate_db:remove_trusted_certs(Ref, CertDb);
+    dtlsex_certificate_db:remove_trusted_certs(Ref, CertDb);
 handle_trusted_certs_db(#state{file_ref_db = undefined}) ->
     %% Something went wrong early (typically cacertfile does not exist) so there is nothing to handle
     ok;
 handle_trusted_certs_db(#state{cert_db_ref = Ref,
 			       file_ref_db = RefDb,
 			       ssl_options = #ssl_options{cacertfile = File}}) ->
-    case ssl_certificate_db:ref_count(Ref, RefDb, -1) of
+    case dtlsex_certificate_db:ref_count(Ref, RefDb, -1) of
 	0 ->
-	    ssl_manager:clean_cert_db(Ref, File);
+	    dtlsex_manager:clean_cert_db(Ref, File);
 	_ ->
 	    ok
     end.
@@ -3123,10 +3123,10 @@ bump_hs_message_seq(Seqs = #message_sequences{write = SeqNo}, write) ->
     {Seqs1, SeqNo}.
 
 get_current_connection_state_prf(CStates, Direction) ->
-	CS = ssl_record:current_connection_state(CStates, Direction),
+	CS = dtlsex_record:current_connection_state(CStates, Direction),
 	CS#connection_state.security_parameters#security_parameters.prf_algorithm.
 get_pending_connection_state_prf(CStates, Direction) ->
-	CS = ssl_record:pending_connection_state(CStates, Direction),
+	CS = dtlsex_record:pending_connection_state(CStates, Direction),
 	CS#connection_state.security_parameters#security_parameters.prf_algorithm.
 
 connection_hashsign(HashSign = {_, _}, _State) ->
@@ -3201,7 +3201,7 @@ cancel_timer(Timer) ->
     end.
 
 handle_unrecv_data(StateName, #state{socket = Socket, transport_cb = Transport} = State) ->
-    ssl_socket:setopts(Transport, Socket, [{active, false}]),
+    dtlsex_socket:setopts(Transport, Socket, [{active, false}]),
     case Transport:recv(Socket, 0, 0) of
 	{error, closed} ->
 	    ok;
@@ -3238,7 +3238,7 @@ buffer_handshake_rec(Rec, State0) ->
 
 buffer_flight_change_cipher(#change_cipher_spec{} = HsRec,
 			    State = #state{connection_states = ConnectionStates0}) ->
-    Epoch = ssl_record:current_connection_state_epoch(ConnectionStates0, write),
+    Epoch = dtlsex_record:current_connection_state_epoch(ConnectionStates0, write),
     buffer_handshake_rec({Epoch, 0, HsRec}, State).
 
 buffer_flight(HandshakeRec,
@@ -3246,11 +3246,11 @@ buffer_flight(HandshakeRec,
 			      negotiated_version = Version,
 			      connection_states = ConnectionStates0,
 			      tls_handshake_history = Handshake0}) ->
-    Epoch = ssl_record:current_connection_state_epoch(ConnectionStates0, write),
+    Epoch = dtlsex_record:current_connection_state_epoch(ConnectionStates0, write),
     {MsgSequences1, MsgSeq} = bump_hs_message_seq(MsgSequences0, write),
     %% TODO: something thats avoid the double encoding would be nice, i.e. encode header and body extra, and have a combinator that does the MTU breakdown...
-    {HsHistory, _} = ssl_handshake:encode_handshake(HandshakeRec, Version, MsgSeq, 16*1024*1024),
-    Handshake1 = ssl_handshake:update_handshake_history(Handshake0, HsHistory),
+    {HsHistory, _} = dtlsex_handshake:encode_handshake(HandshakeRec, Version, MsgSeq, 16*1024*1024),
+    Handshake1 = dtlsex_handshake:update_handshake_history(Handshake0, HsHistory),
 
     buffer_handshake_rec({Epoch, MsgSeq, HandshakeRec},
 			 State0#state{message_sequences = MsgSequences1,
@@ -3265,7 +3265,7 @@ start_flight(ReadMsgSeq, #state{role = Role,
 				ssl_options = SslOpts,
 				connection_states = ConnectionStates} = State) ->
     #connection_state{epoch = Epoch} =
-	ssl_record:current_connection_state(ConnectionStates, write),
+	dtlsex_record:current_connection_state(ConnectionStates, write),
     if
 	Epoch == 0 ->
 	    MsgSeq = init_message_sequences(Role, SslOpts);
@@ -3275,7 +3275,7 @@ start_flight(ReadMsgSeq, #state{role = Role,
     end,
     State#state{
       message_sequences = MsgSeq,
-      dtls_handshake_buffer = ssl_handshake:dtls_handshake_new_flight(ReadMsgSeq)}.
+      dtls_handshake_buffer = dtlsex_handshake:dtls_handshake_new_flight(ReadMsgSeq)}.
 
 send_flight(HandshakeRec, FlightState, State) ->
     send_flight(FlightState, buffer_flight(HandshakeRec, State)).
@@ -3306,9 +3306,9 @@ do_send_flight([], BinMsgs, State = #state{transport_cb = Transport, socket = So
 do_send_flight([{Epoch, MsgSeq, HandshakeRec}|T], BinMsgs0,
 	       State = #state{negotiated_version = Version,
 			      connection_states = ConnectionStates0}) ->
-    CS0 = ssl_record:connection_state_by_epoch(ConnectionStates0, Epoch, write),
+    CS0 = dtlsex_record:connection_state_by_epoch(ConnectionStates0, Epoch, write),
     {BinMsgs, CS1} = encode_handshake_rec(HandshakeRec, Version, MsgSeq, BinMsgs0, CS0),
-    ConnectionStates1 = ssl_record:set_connection_state_by_epoch(ConnectionStates0, CS1, write),
+    ConnectionStates1 = dtlsex_record:set_connection_state_by_epoch(ConnectionStates0, CS1, write),
     do_send_flight(T, BinMsgs, State#state{connection_states = ConnectionStates1}).
 
 cancel_dtls_retransmit_timer(State = #state{dtls_retransmit_timer = TimerRef}) ->
@@ -3332,12 +3332,12 @@ finish_send_flight(_, FlightState, State) ->
     State#state{flight_state = FlightState}.
 
 encode_handshake_rec(#change_cipher_spec{}, Version, _, BinMsgs0, CS0) ->
-    {BinMsg, CS1} = ssl_record:encode_change_cipher_spec(Version, CS0),
+    {BinMsg, CS1} = dtlsex_record:encode_change_cipher_spec(Version, CS0),
     {[BinMsg|BinMsgs0], CS1};
 encode_handshake_rec(HandshakeRec, Version, MsgSeq, BinMsgs0, CS0) ->
-    {_, Fragments} = ssl_handshake:encode_handshake(HandshakeRec, Version, MsgSeq, 1400),
+    {_, Fragments} = dtlsex_handshake:encode_handshake(HandshakeRec, Version, MsgSeq, 1400),
     lists:foldl(fun(F, {Bin, C0}) ->
-			{B, C1} = ssl_record:encode_handshake(F, Version, C0),
+			{B, C1} = dtlsex_record:encode_handshake(F, Version, C0),
 			{[B|Bin], C1} end, {BinMsgs0, CS0}, Fragments).
 
 start_msl_timeout(State = #state{msl_timer = OldTimer}) ->
@@ -3368,7 +3368,7 @@ get_tls_handshake(#ssl_tls{version = {254, _}, sequence = SeqNo},
 
 get_tls_handshake(#ssl_tls{version = {254, _}} = Record,
 		  State = #state{dtls_handshake_buffer = HsState0}) ->
-    case ssl_handshake:get_dtls_handshake(Record, HsState0) of
+    case dtlsex_handshake:get_dtls_handshake(Record, HsState0) of
 	{Packets, ReadSeq, HsState} ->
 	    State#state{tls_packets = Packets,
 			dtls_handshake_buffer = HsState,
@@ -3382,7 +3382,7 @@ get_tls_handshake(#ssl_tls{version = RecVersion, fragment = Data},
 		  State = #state{tls_handshake_buffer = Buf0,
 				 negotiated_version = Version}) ->
     {Packets, Buf} =
-	ssl_handshake:get_tls_handshake(negotiated_version(RecVersion,Version),Data,Buf0),
+	dtlsex_handshake:get_tls_handshake(negotiated_version(RecVersion,Version),Data,Buf0),
     State#state{tls_packets = Packets, tls_handshake_buffer = Buf}.
 
 timestamp() ->

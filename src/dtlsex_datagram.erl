@@ -1,14 +1,14 @@
--module(ssl_datagram).
+-module(dtlsex_datagram).
 
--include("ssl_record.hrl").
--include("ssl_internal.hrl").
--include("ssl_handshake.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_handshake.hrl").
 
 -export([handle_packet/3]).
 
 handle_packet(Address, Port, Packet) ->
 
-    try ssl_record:get_tls_records(Packet, <<>>) of
+    try dtlsex_record:get_tls_records(Packet, <<>>) of
 	%% expect client hello
 	{[#ssl_tls{type = ?HANDSHAKE, version = {254, _}} = Record], <<>>} ->
 	    handle_dtls_client_hello(Address, Port, Record);
@@ -23,8 +23,8 @@ handle_dtls_client_hello(Address, Port,
 			 #ssl_tls{epoch = Epoch, sequence = Seq,
 				  version = Version} = Record) ->
     {[{Hello, _}], _, _} =
-	ssl_handshake:get_dtls_handshake(Record,
-					 ssl_handshake:dtls_handshake_new_flight(undefined)),
+	dtlsex_handshake:get_dtls_handshake(Record,
+					 dtlsex_handshake:dtls_handshake_new_flight(undefined)),
     #client_hello{client_version = {Major, Minor},
 		  random = Random,
 		  session_id = SessionId,
@@ -41,11 +41,11 @@ handle_dtls_client_hello(Address, Port,
 
 	_ ->
 	    %% generate HelloVerifyRequest
-	    {RequestFragment, _} = ssl_handshake:encode_handshake(
-				     ssl_handshake:hello_verify_request(Cookie),
+	    {RequestFragment, _} = dtlsex_handshake:encode_handshake(
+				     dtlsex_handshake:hello_verify_request(Cookie),
 				     Version, 0, 1400),
 	    HelloVerifyRequest =
-		ssl_record:encode_tls_cipher_text(?HANDSHAKE, Version, Epoch, Seq, RequestFragment),
+		dtlsex_record:encode_tls_cipher_text(?HANDSHAKE, Version, Epoch, Seq, RequestFragment),
 	    {reply, HelloVerifyRequest}
     end.
 

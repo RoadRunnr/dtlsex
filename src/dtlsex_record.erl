@@ -23,13 +23,13 @@
 %% 
 %%----------------------------------------------------------------------
 
--module(ssl_record).
+-module(dtlsex_record).
 
--include("ssl_record.hrl").
--include("ssl_internal.hrl").
--include("ssl_alert.hrl").
--include("ssl_handshake.hrl").
--include("ssl_cipher.hrl").
+-include("dtlsex_record.hrl").
+-include("dtlsex_internal.hrl").
+-include("dtlsex_alert.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_cipher.hrl").
 
 %% Connection state handling
 -export([init_connection_states/2, init_connection_state_seq/2,
@@ -803,7 +803,7 @@ initial_connection_state(ConnectionEnd, ConnType) ->
 initial_security_params(ConnectionEnd, ConnType) ->
     SecParams = #security_parameters{connection_end = ConnectionEnd,
 				     compression_algorithm = ?NULL},
-    ssl_cipher:security_parameters(highest_connection_protocol_version(ConnType), ?TLS_NULL_WITH_NULL_NULL,
+    dtlsex_cipher:security_parameters(highest_connection_protocol_version(ConnType), ?TLS_NULL_WITH_NULL_NULL,
 				   SecParams).
 
 empty_connection_state(ConnectionEnd) ->
@@ -879,7 +879,7 @@ cipher(Type, Version, Fragment, CS0) ->
 						      BCA}
 				}} = 
 	hash_and_bump_seqno(CS0, Type, Version, Length, Fragment),
-    {Ciphered, CipherS1} = ssl_cipher:cipher(BCA, CipherS0, MacHash, Fragment, Version),
+    {Ciphered, CipherS1} = dtlsex_cipher:cipher(BCA, CipherS0, MacHash, Fragment, Version),
     CS2 = CS1#connection_state{cipher_state=CipherS1},
     {Ciphered, CS2}.
 
@@ -890,7 +890,7 @@ decipher(TLS=#ssl_tls{type=Type, version=Version={254, _},
     BCA = SP#security_parameters.bulk_cipher_algorithm,
     HashSz = SP#security_parameters.hash_size,
     CipherS0 = CS0#connection_state.cipher_state,
-    case ssl_cipher:decipher(BCA, HashSz, CipherS0, Fragment, Version) of
+    case dtlsex_cipher:decipher(BCA, HashSz, CipherS0, Fragment, Version) of
 	{T, Mac, CipherS1} ->
 	    CS1 = CS0#connection_state{cipher_state = CipherS1},
 	    TLength = size(T),
@@ -910,7 +910,7 @@ decipher(TLS=#ssl_tls{type=Type, version=Version, fragment=Fragment}, CS0) ->
     BCA = SP#security_parameters.bulk_cipher_algorithm, 
     HashSz = SP#security_parameters.hash_size,
     CipherS0 = CS0#connection_state.cipher_state,
-    case ssl_cipher:decipher(BCA, HashSz, CipherS0, Fragment, Version) of
+    case dtlsex_cipher:decipher(BCA, HashSz, CipherS0, Fragment, Version) of
 	{T, Mac, CipherS1} ->
 	    CS1 = CS0#connection_state{cipher_state = CipherS1},
 	    TLength = size(T),
@@ -979,11 +979,11 @@ mac_hash({_,_}, ?NULL, _MacSecret, _SeqNo, _Type,
 	 _Length, _Fragment) ->
     <<>>;
 mac_hash({3, 0}, MacAlg, MacSecret, SeqNo, Type, Length, Fragment) ->
-    ssl_ssl3:mac_hash(MacAlg, MacSecret, SeqNo, Type, Length, Fragment);
+    dtlsex_ssl3:mac_hash(MacAlg, MacSecret, SeqNo, Type, Length, Fragment);
 mac_hash({Major, Minor} = Version, MacAlg, MacSecret, SeqNo, Type, Length, Fragment)
   when (Major == 3 andalso Minor >= 1) orelse
        Major == 254 ->
-    ssl_tls1:mac_hash(MacAlg, MacSecret, SeqNo, Type, Version,
+    dtlsex_tls1:mac_hash(MacAlg, MacSecret, SeqNo, Type, Version,
 		      Length, Fragment).
 
 sufficient_tlsv1_2_crypto_support() ->

@@ -25,10 +25,10 @@
 %% sent according to the SSL-record protocol.  
 %% %%----------------------------------------------------------------------
 
--module(ssl_alert).
+-module(dtlsex_alert).
 
--include("ssl_alert.hrl").
--include("ssl_record.hrl").
+-include("dtlsex_alert.hrl").
+-include("dtlsex_record.hrl").
 
 -export([alert_txt/1, reason_code/2]).
 

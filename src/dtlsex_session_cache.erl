@@ -18,18 +18,18 @@
 %%
 
 %%
--module(ssl_session_cache).
+-module(dtlsex_session_cache).
 
 -behaviour(ssl_session_cache_api).
 
--include("ssl_handshake.hrl").
--include("ssl_internal.hrl").
+-include("dtlsex_handshake.hrl").
+-include("dtlsex_internal.hrl").
 
 -export([init/1, terminate/1, lookup/2, update/3, delete/2, foldl/3, 
 	 select_session/2]). 
 
 %%--------------------------------------------------------------------
-%% Description: Return table reference. Called by ssl_manager process. 
+%% Description: Return table reference. Called by dtlsex_manager process. 
 %%--------------------------------------------------------------------
 init(_) ->
     ets:new(cache_name(), [ordered_set, protected]).
@@ -54,14 +54,14 @@ lookup(Cache, Key) ->
 
 %%--------------------------------------------------------------------
 %% Description: Caches a new session or updates a already cached one.
-%% Will only be called from the ssl_manager process.
+%% Will only be called from the dtlsex_manager process.
 %%--------------------------------------------------------------------
 update(Cache, Key, Session) ->
     ets:insert(Cache, {Key, Session}).
 
 %%--------------------------------------------------------------------
 %% Description: Delets a cache entry.
-%% Will only be called from the ssl_manager process.
+%% Will only be called from the dtlsex_manager process.
 %%--------------------------------------------------------------------
 delete(Cache, Key) ->
     ets:delete(Cache, Key).
@@ -88,4 +88,4 @@ select_session(Cache, PartialKey) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 cache_name() ->
-    ssl_otp_session_cache.
+    dtlsex_otp_session_cache.
