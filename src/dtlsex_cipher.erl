@@ -1126,37 +1126,39 @@ filter(DerCert, Ciphers) ->
 	{_, ecdsa} ->
 	    Ciphers1 -- rsa_signed_suites()
     end.
-	
+
 %%--------------------------------------------------------------------
 -spec filter_suites([cipher_suite()]) -> [cipher_suite()].
 %%
-%% Description: filter suites for algorithms
+%% Description: Filter suites for algorithms supported by crypto.
 %%-------------------------------------------------------------------
 filter_suites(Suites = [{_,_,_}|_]) ->
-    Algos = crypto:algorithms(),
+    Algos = crypto:supports(),
     lists:filter(fun({KeyExchange, Cipher, Hash}) ->
-			 is_acceptable_keyexchange(KeyExchange, Algos) andalso
-			     is_acceptable_cipher(Cipher, Algos) andalso
-			     is_acceptable_hash(Hash, Algos)
+			 is_acceptable_keyexchange(KeyExchange,  proplists:get_value(public_keys, Algos)) andalso
+			     is_acceptable_cipher(Cipher,  proplists:get_value(ciphers, Algos)) andalso
+			     is_acceptable_hash(Hash,  proplists:get_value(hashs, Algos))
 		 end, Suites);
 
 filter_suites(Suites = [{_,_,_,_}|_]) ->
-    Algos = crypto:algorithms(),
+    Algos = crypto:supports(),
+    Hashs =  proplists:get_value(hashs, Algos),
     lists:filter(fun({KeyExchange, Cipher, Hash, Prf}) ->
-			 is_acceptable_keyexchange(KeyExchange, Algos) andalso
-			     is_acceptable_cipher(Cipher, Algos) andalso
-			     is_acceptable_hash(Hash, Algos) andalso
-			     is_acceptable_prf(Prf, Algos)
+			 is_acceptable_keyexchange(KeyExchange, proplists:get_value(public_keys, Algos)) andalso
+			     is_acceptable_cipher(Cipher, proplists:get_value(ciphers, Algos)) andalso
+			     is_acceptable_hash(Hash, Hashs) andalso
+			     is_acceptable_prf(Prf, Hashs)
 		 end, Suites);
 
 filter_suites(Suites) ->
-    Algos = crypto:algorithms(),
+    Algos = crypto:supports(),
+    Hashs =  proplists:get_value(hashs, Algos),
     lists:filter(fun(Suite) ->
 			 {KeyExchange, Cipher, Hash, Prf} = dtlsex_cipher:suite_definition(Suite),
-			 is_acceptable_keyexchange(KeyExchange, Algos) andalso
-			     is_acceptable_cipher(Cipher, Algos) andalso
-			     is_acceptable_hash(Hash, Algos) andalso
-			     is_acceptable_prf(Prf, Algos)
+			 is_acceptable_keyexchange(KeyExchange, proplists:get_value(public_keys, Algos)) andalso
+			     is_acceptable_cipher(Cipher,  proplists:get_value(ciphers, Algos)) andalso
+			     is_acceptable_hash(Hash, Hashs) andalso
+			     is_acceptable_prf(Prf, Hashs)
 		 end, Suites).
 
 is_acceptable_keyexchange(KeyExchange, Algos)
@@ -1164,12 +1166,18 @@ is_acceptable_keyexchange(KeyExchange, Algos)
        KeyExchange == ecdhe_ecdsa;
        KeyExchange == ecdh_rsa;
        KeyExchange == ecdhe_rsa;
-       KeyExchange == ecdh_anon;
-       KeyExchange == ecdhe_psk ->
-    proplists:get_bool(ec, Algos);
+       KeyExchange == ecdh_anon ->
+    proplists:get_bool(ecdh, Algos);
 is_acceptable_keyexchange(_, _) ->
     true.
 
+is_acceptable_cipher(Cipher, Algos)
+  when Cipher == aes_128_gcm;
+       Cipher == aes_256_gcm ->
+    proplists:get_bool(aes_gcm, Algos);
+is_acceptable_cipher(Cipher, Algos)
+  when Cipher == chacha20_poly1305 ->
+    proplists:get_bool(Cipher, Algos);
 is_acceptable_cipher(_, _) ->
     true.
 

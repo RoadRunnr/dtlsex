@@ -1140,7 +1140,7 @@ select_next_protocol(Protocols, NextProtocolSelector) ->
     end.
 
 default_ecc_extensions(Version) ->
-    case proplists:get_bool(ec, crypto:algorithms()) of
+    case proplists:get_bool(ecdh, proplists:get_value(public_keys, crypto:supports())) of
 	true ->
 	    EcPointFormats = #ec_point_formats{ec_point_format_list = [?ECPOINT_UNCOMPRESSED]},
 	    EllipticCurves = #elliptic_curves{elliptic_curve_list = dtlsex_tls1:ecc_curves(Version)},
@@ -1150,7 +1150,7 @@ default_ecc_extensions(Version) ->
     end.
 
 handle_ecc_extensions(Version, EcPointFormats0, EllipticCurves0) ->
-    case proplists:get_bool(ec, crypto:algorithms()) of
+    case proplists:get_bool(ecdh, proplists:get_value(public_keys, crypto:supports())) of
 	true ->
 	    EcPointFormats1 = handle_ecc_point_fmt_extension(EcPointFormats0),
 	    EllipticCurves1 = handle_ecc_curves_extension(Version, EllipticCurves0),
@@ -2182,7 +2182,7 @@ default_hash_signs() ->
 		 ?TLSEXT_SIGALG(sha),
 		 ?TLSEXT_SIGALG_DSA(sha),
 		 ?TLSEXT_SIGALG_RSA(md5)],
-    HasECC = proplists:get_bool(ec, crypto:algorithms()),
+    HasECC = proplists:get_bool(ecdh, proplists:get_value(public_keys, crypto:supports())),
     #hash_sign_algos{hash_sign_algos =
 			 lists:filter(fun({_, ecdsa}) -> HasECC;
 					 (_) -> true end, HashSigns)}.

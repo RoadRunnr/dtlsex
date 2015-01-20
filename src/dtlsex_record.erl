@@ -987,7 +987,7 @@ mac_hash({Major, Minor} = Version, MacAlg, MacSecret, SeqNo, Type, Length, Fragm
 		      Length, Fragment).
 
 sufficient_tlsv1_2_crypto_support() ->
-    proplists:get_bool(sha256, crypto:algorithms()).
+    proplists:get_bool(sha256, proplists:get_value(hashs, crypto:supports())).
 
 protocol_version_atom(stream) ->
     protocol_version;
