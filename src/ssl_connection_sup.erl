@@ -26,8 +26,8 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_link_dist/0]).
--export([start_child/1, start_child_dist/1]).
+-export([start_link/0]).
+-export([start_child/1]).
 
 %% Supervisor callback
 -export([init/1]).
@@ -38,14 +38,8 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-start_link_dist() ->
-    supervisor:start_link({local, ssl_connection_sup_dist}, ?MODULE, []).
-
 start_child(Args) ->
     supervisor:start_child(?MODULE, Args).
-    
-start_child_dist(Args) ->
-    supervisor:start_child(ssl_connection_sup_dist, Args).
     
 %%%=========================================================================
 %%%  Supervisor callback

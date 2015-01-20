@@ -674,7 +674,6 @@ handle_options(Opts0, _Role) ->
       secure_renegotiate = handle_option(secure_renegotiate, Opts, false),
       renegotiate_at = handle_option(renegotiate_at, Opts, ?DEFAULT_RENEGOTIATE_AT),
       hibernate_after = handle_option(hibernate_after, Opts, undefined),
-      erl_dist = handle_option(erl_dist, Opts, false),
       next_protocols_advertised = 
 			handle_option(next_protocols_advertised, Opts, undefined),
       next_protocol_selector = 
@@ -689,7 +688,7 @@ handle_options(Opts0, _Role) ->
 		  user_lookup_fun, psk_identity, srp_identity, ciphers,
 		  reuse_session, reuse_sessions, ssl_imp,
 		  cb_info, renegotiate_at, secure_renegotiate, hibernate_after, 
-		  erl_dist, next_protocols_advertised,
+		  next_protocols_advertised,
 		  client_preferred_next_protocols],
     
     SockOpts = lists:foldl(fun(Key, PropList) -> 
@@ -830,9 +829,6 @@ validate_option(renegotiate_at, Value) when is_integer(Value) ->
 validate_option(hibernate_after, undefined) ->
     undefined;
 validate_option(hibernate_after, Value) when is_integer(Value), Value >= 0 ->
-    Value;
-validate_option(erl_dist,Value) when Value == true;
-				     Value == false ->
     Value;
 validate_option(client_preferred_next_protocols = Opt, {Precedence, PreferredProtocols} = Value)
   when is_list(PreferredProtocols) ->
