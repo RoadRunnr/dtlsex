@@ -3351,7 +3351,7 @@ init_message_sequences() ->
 init_message_sequences(server, #ssl_options{verify_client_hello = true}) ->
     #message_sequences{read = 0, write = 1};
 init_message_sequences(_, _) ->
-    #message_sequences{read = 0, write = 1}.
+    #message_sequences{read = 0, write = 0}.
 
 negotiated_version(Version, undefined) ->
     Version;
