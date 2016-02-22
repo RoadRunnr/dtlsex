@@ -414,6 +414,13 @@ key_exchange(client, _Version, {ecdh, #'ECPrivateKey'{publicKey = {0, ECPublicKe
 		dh_public = ECPublicKey}
 	       };
 
+key_exchange(client, _Version, {ecdh, #'ECPrivateKey'{publicKey = ECPublicKey}})
+  when is_binary(ECPublicKey) ->
+    #client_key_exchange{
+	      exchange_keys = #client_ec_diffie_hellman_public{
+		dh_public = ECPublicKey}
+	       };
+
 key_exchange(client, _Version, {psk, Identity}) ->
     #client_key_exchange{
 	      exchange_keys = #client_psk_identity{
@@ -421,6 +428,14 @@ key_exchange(client, _Version, {psk, Identity}) ->
 	       };
 
 key_exchange(client, _Version, {ecdhe_psk, Identity, #'ECPrivateKey'{publicKey = {0, ECPublicKey}}}) ->
+    #client_key_exchange{
+	      exchange_keys = #client_ecdhe_psk_identity{
+		identity = Identity,
+		dh_public = ECPublicKey}
+	       };
+
+key_exchange(client, _Version, {ecdhe_psk, Identity, #'ECPrivateKey'{publicKey = ECPublicKey}})
+  when is_binary(ECPublicKey) ->
     #client_key_exchange{
 	      exchange_keys = #client_ecdhe_psk_identity{
 		identity = Identity,
@@ -457,8 +472,16 @@ key_exchange(server, Version, {dh, {PublicKey, _},
 			    ClientRandom, ServerRandom, PrivateKey);
 
 key_exchange(server, Version, {ecdh,  #'ECPrivateKey'{publicKey =  {0, ECPublicKey},
-						      parameters = ECCurve}, HashSign, ClientRandom, ServerRandom,
-	     PrivateKey}) ->
+						      parameters = ECCurve}, HashSign,
+			       ClientRandom, ServerRandom, PrivateKey}) ->
+    ServerECParams = #server_ecdh_params{curve = ECCurve, public = ECPublicKey},
+    enc_server_key_exchange(Version, ServerECParams, HashSign,
+			    ClientRandom, ServerRandom, PrivateKey);
+
+key_exchange(server, Version, {ecdh,  #'ECPrivateKey'{publicKey =  ECPublicKey,
+						      parameters = ECCurve}, HashSign,
+			       ClientRandom, ServerRandom, PrivateKey})
+  when is_binary(ECPublicKey) ->
     ServerECParams = #server_ecdh_params{curve = ECCurve, public = ECPublicKey},
     enc_server_key_exchange(Version, ServerECParams, HashSign,
 			    ClientRandom, ServerRandom, PrivateKey);
@@ -473,6 +496,17 @@ key_exchange(server, Version, {ecdhe_psk, PskIdentityHint,
 			       #'ECPrivateKey'{publicKey =  {0, ECPublicKey},
 					       parameters = ECCurve},
 			       HashSign, ClientRandom, ServerRandom, PrivateKey}) ->
+    ServerECDHEPSKParams = #server_ecdhe_psk_params{
+      hint = PskIdentityHint,
+      dh_params = #server_ecdh_params{curve = ECCurve, public = ECPublicKey}},
+    enc_server_key_exchange(Version, ServerECDHEPSKParams, HashSign,
+			    ClientRandom, ServerRandom, PrivateKey);
+
+key_exchange(server, Version, {ecdhe_psk, PskIdentityHint,
+			       #'ECPrivateKey'{publicKey =  ECPublicKey,
+					       parameters = ECCurve},
+			       HashSign, ClientRandom, ServerRandom, PrivateKey})
+  when is_binary(ECPublicKey) ->
     ServerECDHEPSKParams = #server_ecdhe_psk_params{
       hint = PskIdentityHint,
       dh_params = #server_ecdh_params{curve = ECCurve, public = ECPublicKey}},
