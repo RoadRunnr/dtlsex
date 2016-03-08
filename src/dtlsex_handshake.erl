@@ -806,6 +806,10 @@ prf({3,0}, _, _, _, _) ->
 prf({3,1}, Secret, Label, Seed, WantedLength) ->
     {ok, dtlsex_tls1:prf(?MD5SHA, Secret, Label, Seed, WantedLength)};
 prf({3,_N}, Secret, Label, Seed, WantedLength) ->
+    {ok, dtlsex_tls1:prf(?SHA256, Secret, Label, Seed, WantedLength)};
+prf({254, 255}, Secret, Label, Seed, WantedLength) ->
+    {ok, dtlsex_tls1:prf(?MD5SHA, Secret, Label, Seed, WantedLength)};
+prf({254, _}, Secret, Label, Seed, WantedLength) ->
     {ok, dtlsex_tls1:prf(?SHA256, Secret, Label, Seed, WantedLength)}.
 
 %%--------------------------------------------------------------------
