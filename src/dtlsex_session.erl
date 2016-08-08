@@ -106,7 +106,7 @@ select_session(Sessions, #ssl_options{ciphers = Ciphers}, OwnCert) ->
  	end,
     case lists:dropwhile(IsNotResumable, Sessions) of
 	[] ->   no_session;
-	[[Id, _]|_] -> Id
+	[Session | _] -> Session#session.session_id
     end.
 
 is_resumable(_, _, #ssl_options{reuse_sessions = false}, _, _, _, _) ->
