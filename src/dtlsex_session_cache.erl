@@ -26,7 +26,7 @@
 -include("dtlsex_internal.hrl").
 
 -export([init/1, terminate/1, lookup/2, update/3, delete/2, foldl/3, 
-	 select_session/2]). 
+	 select_session/2, size/1]).
 
 %%--------------------------------------------------------------------
 %% Description: Return table reference. Called by dtlsex_manager process. 
@@ -83,6 +83,12 @@ foldl(Fun, Acc0, Cache) ->
 select_session(Cache, PartialKey) ->    
     ets:select(Cache, 
 	       [{{{PartialKey,'_'}, '$1'},[],['$1']}]).
+
+%%--------------------------------------------------------------------
+%% Description: Returns the cache size
+%%--------------------------------------------------------------------
+size(Cache) ->
+    ets:info(Cache, size).
 
 %%--------------------------------------------------------------------
 %%% Internal functions
