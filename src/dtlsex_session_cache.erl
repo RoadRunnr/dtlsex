@@ -20,7 +20,7 @@
 %%
 -module(dtlsex_session_cache).
 
--behaviour(ssl_session_cache_api).
+-behaviour(dtlsex_session_cache_api).
 
 -include("dtlsex_handshake.hrl").
 -include("dtlsex_internal.hrl").
