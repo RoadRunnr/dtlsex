@@ -99,7 +99,7 @@ select_session([], _, _) ->
     no_session;
 select_session(Sessions, #ssl_options{ciphers = Ciphers}, OwnCert) ->
     IsNotResumable =
-	fun([_Id, Session]) ->
+	fun(Session) ->
 		not (resumable(Session#session.is_resumable) andalso
 		     lists:member(Session#session.cipher_suite, Ciphers)
 		     andalso (OwnCert == Session#session.own_certificate))
