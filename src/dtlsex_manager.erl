@@ -182,7 +182,7 @@ invalidate_session(Port, Session) ->
 init([Name, Opts]) ->
     put(dtlsex_manager, Name),
     process_flag(trap_exit, true),
-    CacheCb = proplists:get_value(session_cb, Opts, ssl_session_cache),
+    CacheCb = proplists:get_value(session_cb, Opts, dtlsex_session_cache),
     SessionLifeTime =  
 	proplists:get_value(session_lifetime, Opts, ?'24H_in_sec'),
     CertDb = dtlsex_certificate_db:create(),

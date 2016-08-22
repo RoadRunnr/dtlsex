@@ -2777,7 +2777,7 @@ initial_state(Role, Host, Port, Socket, {SSLOptions, SocketOptions}, User,
 			 {ok, Cb} when is_atom(Cb) ->
 			    Cb;
 			 _  ->
-			     ssl_session_cache
+			     dtlsex_session_cache
 		     end,
     
     Monitor = erlang:monitor(process, User),
