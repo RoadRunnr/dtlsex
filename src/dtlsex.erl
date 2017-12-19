@@ -565,7 +565,7 @@ random_bytes(N) ->
 	    RandBytes
     catch
 	error:low_entropy ->
-	    crypto:rand_bytes(N)
+	    crypto:strong_rand_bytes(N)
     end.
 
 %%%--------------------------------------------------------------
