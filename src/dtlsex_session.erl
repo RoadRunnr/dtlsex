@@ -73,7 +73,7 @@ valid_session(#session{time_stamp = TimeStamp}, LifeTime) ->
 server_id(Port, <<>>, _SslOpts, _Cert, _, _) ->
     {dtlsex_manager:new_session_id(Port), undefined};
 server_id(Port, SuggestedId, Options, Cert, Cache, CacheCb) ->
-    LifeTime = case application:get_env(ssl, session_lifetime) of
+    LifeTime = case application:get_env(dtlsex, session_lifetime) of
 		   {ok, Time} when is_integer(Time) -> Time;
 		   _ -> ?'24H_in_sec'
 	       end,

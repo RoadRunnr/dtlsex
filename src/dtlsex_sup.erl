@@ -62,14 +62,14 @@ init([]) ->
 
 
 manager_opts() ->
-    CbOpts = case application:get_env(ssl, session_cb) of
+    CbOpts = case application:get_env(dtlsex, session_cb) of
 		 {ok, Cb} when is_atom(Cb) ->
 		     InitArgs = session_cb_init_args(),
 		     [{session_cb, Cb}, {session_cb_init_args, InitArgs}];
 		 _  ->
 		     []
 	     end,
-    case application:get_env(ssl, session_lifetime) of
+    case application:get_env(dtlsex, session_lifetime) of
 	{ok, Time} when is_integer(Time) ->
 	    [{session_lifetime, Time}| CbOpts];
 	_  ->
@@ -101,7 +101,7 @@ connection_manager_child_spec() ->
 
 
 session_cb_init_args() ->
-    case application:get_env(ssl, session_cb_init_args) of
+    case application:get_env(dtlsex, session_cb_init_args) of
 	{ok, Args} when is_list(Args) ->
 	    Args;
 	_  ->

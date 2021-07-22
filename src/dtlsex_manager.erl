@@ -402,7 +402,7 @@ session_validation({{Port, _}, Session}, LifeTime) ->
     LifeTime.
 
 delay_time() ->
-    case application:get_env(ssl, session_delay_cleanup_time) of
+    case application:get_env(dtlsex, session_delay_cleanup_time) of
 	{ok, Time} when is_integer(Time) ->
 	    Time;
 	_ ->

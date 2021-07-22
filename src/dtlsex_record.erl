@@ -628,7 +628,7 @@ supported_protocol_versions(ConnType) ->
     Fun = fun(Version) ->
 		  protocol_version(Version) 
 	  end,
-    case application:get_env(ssl, protocol_version_atom(ConnType)) of
+    case application:get_env(dtlsex, protocol_version_atom(ConnType)) of
 	undefined ->
 	    lists:map(Fun, supported_protocol_versions(ConnType, []));
 	{ok, []} ->
@@ -643,7 +643,7 @@ supported_protocol_versions(ConnType) ->
 
 supported_protocol_versions(ConnType, []) ->
     Vsns = supported_connection_protocol_versions(ConnType, []),
-    application:set_env(ssl, protocol_version_atom(ConnType), Vsns),
+    application:set_env(dtlsex, protocol_version_atom(ConnType), Vsns),
     Vsns;
 
 supported_protocol_versions(_Type, [_|_] = Vsns) ->

@@ -2773,7 +2773,7 @@ initial_state(Role, Host, Port, Socket, {SSLOptions, SocketOptions}, User,
     ConnType = connection_type(CbInfo, Socket),
     ConnectionStates = dtlsex_record:init_connection_states(Role, ConnType),
     
-    SessionCacheCb = case application:get_env(ssl, session_cb) of
+    SessionCacheCb = case application:get_env(dtlsex, session_cb) of
 			 {ok, Cb} when is_atom(Cb) ->
 			    Cb;
 			 _  ->
